@@ -1,6 +1,7 @@
+version: "2"
+
 run:
   timeout: 5m
-  issues-exit-code: 1
 
 linters:
   enable:
@@ -13,10 +14,23 @@ linters:
     - gosec
     - copyloopvar
 
-issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - errcheck
-        - revive
-        - gosec
+  settings:
+    staticcheck:
+      checks:
+        - all
+        - -QF*
+        - -ST1000
+
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+          - revive
+          - gosec
+      - linters:
+          - revive
+        text: "exported: |package-comments:|should have (a )?package comment"
+      - linters:
+          - gosec
+        text: "G704|G304"

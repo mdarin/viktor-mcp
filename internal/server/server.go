@@ -68,7 +68,7 @@ func Build(_ context.Context, stdout io.Writer) (*mcp.Server, *tools.Registry, e
 	registry.RegisterAll()
 
 	defaultURL := cfg.Instances[cfg.DefaultInstance].URL
-	fmt.Fprintf(stdout, "viktor %s: connecting to %s (instance %q, %d configured)\n", client.Version, defaultURL, cfg.DefaultInstance, len(cfg.Instances))
+	_, _ = fmt.Fprintf(stdout, "viktor %s: connecting to %s (instance %q, %d configured)\n", client.Version, defaultURL, cfg.DefaultInstance, len(cfg.Instances))
 	return server, registry, nil
 }
 

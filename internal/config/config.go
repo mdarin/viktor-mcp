@@ -263,6 +263,6 @@ func (c *Config) warnPerms(warn io.Writer) {
 		return
 	}
 	if info.Mode().Perm()&0o077 != 0 {
-		fmt.Fprintf(warn, "viktor: WARNING config file %s is readable by group/others (mode %04o); tokens may leak\n", c.Path, info.Mode().Perm())
+		_, _ = fmt.Fprintf(warn, "viktor: WARNING config file %s is readable by group/others (mode %04o); tokens may leak\n", c.Path, info.Mode().Perm())
 	}
 }

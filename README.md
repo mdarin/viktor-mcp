@@ -1,5 +1,11 @@
 # viktor
 
+[![ci](https://github.com/mdarin/viktor-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/mdarin/viktor-mcp/actions/workflows/ci.yml)
+[![release](https://github.com/mdarin/viktor-mcp/actions/workflows/release.yml/badge.svg)](https://github.com/mdarin/viktor-mcp/actions/workflows/release.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/mdarin/viktor-mcp.svg)](https://pkg.go.dev/github.com/mdarin/viktor-mcp)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go&logoColor=white)](https://go.dev)
+
 Vikunja MCP-сервер на Go: порт и модернизация [vikunja-mcp](https://github.com/ivantohelpyou/vikunja-mcp) (Python, FastMCP).
 
 Итог — один статический бинарник вместо uv/Python/uv cache prune.
