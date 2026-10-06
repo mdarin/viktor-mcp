@@ -1,0 +1,37 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [linux, darwin]
+        arch: [amd64, arm64]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: true
+
+      - name: Test
+        run: go test -count=1 ./...
+
+      - name: Build
+        run: go build -trimpath -ldflags "-s -w" -o viktor-${{ matrix.os }}-${{ matrix.arch }} ./cmd/viktor
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: "0"
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: viktor-${{ matrix.os }}-${{ matrix.arch }}

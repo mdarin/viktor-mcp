@@ -1,0 +1,36 @@
+BINARY := viktor
+BIN_DIR := bin
+PKG := ./...
+GO := go
+
+.PHONY: build test lint fmt vet clean run ci
+
+build:
+	$(GO) build -trimpath -ldflags "-s -w" -o $(BIN_DIR)/$(BINARY) ./cmd/$(BINARY)
+
+test:
+	$(GO) test -race -count=1 $(PKG)
+
+lint:
+	golangci-lint run
+
+fmt:
+	$(GO) fmt ./...
+
+vet:
+	$(GO) vet $(PKG)
+
+run: build
+	./$(BIN_DIR)/$(BINARY)
+
+clean:
+	rm -rf $(BIN_DIR)
+
+ci: lint vet test build
+
+PREFIX ?= $(HOME)/.local
+
+.PHONY: install
+install: build
+	install -d $(PREFIX)/bin
+	install -m 0755 $(BIN_DIR)/$(BINARY) $(PREFIX)/bin/$(BINARY)

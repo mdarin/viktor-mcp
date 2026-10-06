@@ -1,0 +1,2022 @@
+[
+  {
+    "description": "Claim and complete a handoff item from the assignment queue",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "destination": {
+          "type": "string"
+        },
+        "instance": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        },
+        "task_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "task_id",
+        "destination"
+      ],
+      "type": "object"
+    },
+    "name": "assign_apply"
+  },
+  {
+    "description": "Check the assignment queue for pending handoff items",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "instance": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "assign_queue"
+  },
+  {
+    "description": "Bulk assign tasks to kanban buckets",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "assignments": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "bucket_id": {
+                "type": "integer"
+              },
+              "position": {
+                "type": "integer"
+              },
+              "task_id": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "task_id",
+              "bucket_id"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "project_id": {
+          "type": "integer"
+        },
+        "view_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "project_id",
+        "view_id",
+        "assignments"
+      ],
+      "type": "object"
+    },
+    "name": "batch_assign_buckets"
+  },
+  {
+    "description": "Complete all tasks with a matching label",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "label_filter": {
+          "type": "string"
+        },
+        "project_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "project_id",
+        "label_filter"
+      ],
+      "type": "object"
+    },
+    "name": "batch_complete_by_label"
+  },
+  {
+    "description": "Create multiple labels, skipping existing ones",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "labels": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "hex_color": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "title"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "labels"
+      ],
+      "type": "object"
+    },
+    "name": "batch_create_labels"
+  },
+  {
+    "description": "Create multiple tasks at once with labels and relations",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "create_missing_labels": {
+          "type": "boolean"
+        },
+        "project_id": {
+          "type": "integer"
+        },
+        "tasks": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "blocked_by": {
+                "items": {
+                  "type": "string"
+                },
+                "type": [
+                  "null",
+                  "array"
+                ]
+              },
+              "blocks": {
+                "items": {
+                  "type": "string"
+                },
+                "type": [
+                  "null",
+                  "array"
+                ]
+              },
+              "bucket": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "due_date": {
+                "type": "string"
+              },
+              "labels": {
+                "items": {
+                  "type": "string"
+                },
+                "type": [
+                  "null",
+                  "array"
+                ]
+              },
+              "priority": {
+                "type": "integer"
+              },
+              "ref": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "title"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "project_id",
+        "tasks"
+      ],
+      "type": "object"
+    },
+    "name": "batch_create_tasks"
+  },
+  {
+    "description": "Move tasks to buckets based on their labels",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "label_to_bucket_map": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "type": "object"
+        },
+        "project_id": {
+          "type": "integer"
+        },
+        "view_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "project_id",
+        "view_id",
+        "label_to_bucket_map"
+      ],
+      "type": "object"
+    },
+    "name": "batch_label_to_buckets"
+  },
+  {
+    "description": "Move all tasks with a matching label to a bucket",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "bucket_id": {
+          "type": "integer"
+        },
+        "label_filter": {
+          "type": "string"
+        },
+        "project_id": {
+          "type": "integer"
+        },
+        "view_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "project_id",
+        "label_filter",
+        "view_id",
+        "bucket_id"
+      ],
+      "type": "object"
+    },
+    "name": "batch_move_by_label"
+  },
+  {
+    "description": "Bulk update labels on multiple tasks",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "add_labels": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "project_id": {
+          "type": "integer"
+        },
+        "remove_labels": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "set_labels": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "task_ids": {
+          "items": {
+            "type": "integer"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "project_id",
+        "task_ids"
+      ],
+      "type": "object"
+    },
+    "name": "batch_relabel"
+  },
+  {
+    "description": "Set positions for multiple tasks in a view",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "positions": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "position": {
+                "type": "integer"
+              },
+              "task_id": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "task_id",
+              "position"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "project_id": {
+          "type": "integer"
+        },
+        "view_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "project_id",
+        "view_id",
+        "positions"
+      ],
+      "type": "object"
+    },
+    "name": "batch_reorder_tasks"
+  },
+  {
+    "description": "Update multiple tasks at once",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "updates": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "description": {
+                "type": "string"
+              },
+              "due_date": {
+                "type": "string"
+              },
+              "priority": {
+                "type": "integer"
+              },
+              "task_id": {
+                "type": "integer"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "task_id"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "updates"
+      ],
+      "type": "object"
+    },
+    "name": "batch_update_tasks"
+  },
+  {
+    "description": "Add an event to the calendar by creating a labeled task",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "due_date": {
+          "type": "string"
+        },
+        "end_date": {
+          "type": "string"
+        },
+        "label_name": {
+          "type": "string"
+        },
+        "project_id": {
+          "type": "integer"
+        },
+        "start_date": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_id",
+        "title",
+        "due_date"
+      ],
+      "type": "object"
+    },
+    "name": "cal_add_event"
+  },
+  {
+    "description": "Add a comment to a task",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "task_id": {
+          "type": "integer"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "text"
+      ],
+      "type": "object"
+    },
+    "name": "comment_add"
+  },
+  {
+    "description": "Delete a comment",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "comment_id": {
+          "type": "integer"
+        },
+        "task_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "task_id",
+        "comment_id"
+      ],
+      "type": "object"
+    },
+    "name": "comment_delete"
+  },
+  {
+    "description": "List comments on a task",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "task_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "task_id"
+      ],
+      "type": "object"
+    },
+    "name": "comment_list"
+  },
+  {
+    "description": "Recent comments across all tasks",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "comment_recent"
+  },
+  {
+    "description": "Update a comment",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "comment_id": {
+          "type": "integer"
+        },
+        "task_id": {
+          "type": "integer"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "comment_id",
+        "text"
+      ],
+      "type": "object"
+    },
+    "name": "comment_update"
+  },
+  {
+    "description": "Delete a config key",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "type": "object"
+    },
+    "name": "config_delete"
+  },
+  {
+    "description": "Read a config value",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "type": "object"
+    },
+    "name": "config_get"
+  },
+  {
+    "description": "List all config keys",
+    "inputSchema": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "name": "config_list"
+  },
+  {
+    "description": "Write a config value",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "value"
+      ],
+      "type": "object"
+    },
+    "name": "config_set"
+  },
+  {
+    "description": "Update an existing config value",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "value"
+      ],
+      "type": "object"
+    },
+    "name": "config_update"
+  },
+  {
+    "description": "Get the current default instance and project context",
+    "inputSchema": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "name": "ctx_get"
+  },
+  {
+    "description": "Set default instance and project for subsequent queries",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "instance": {
+          "type": "string"
+        },
+        "project_id": {
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "ctx_set"
+  },
+  {
+    "description": "Check if a Vikunja API token is valid",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "instance": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "instance_check_health"
+  },
+  {
+    "description": "Add and connect a new Vikunja instance",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "token": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "url",
+        "token"
+      ],
+      "type": "object"
+    },
+    "name": "instance_connect"
+  },
+  {
+    "description": "Remove a configured Vikunja instance",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "instance_disconnect"
+  },
+  {
+    "description": "List all configured Vikunja instances",
+    "inputSchema": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "name": "instance_list"
+  },
+  {
+    "description": "Rename a configured instance",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "new_name": {
+          "type": "string"
+        },
+        "old_name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "old_name",
+        "new_name"
+      ],
+      "type": "object"
+    },
+    "name": "instance_rename"
+  },
+  {
+    "description": "Switch to a different Vikunja instance",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "instance_switch"
+  },
+  {
+    "description": "Create a kanban bucket",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "type": "integer"
+        },
+        "position": {
+          "type": "integer"
+        },
+        "project_id": {
+          "type": "integer"
+        },
+        "title": {
+          "type": "string"
+        },
+        "view_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "project_id",
+        "view_id",
+        "title"
+      ],
+      "type": "object"
+    },
+    "name": "kanban_create_bucket"
+  },
+  {
+    "description": "Delete a kanban bucket; tasks may move to another bucket",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "bucket_id": {
+          "type": "integer"
+        },
+        "project_id": {
+          "type": "integer"
+        },
+        "view_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "project_id",
+        "view_id",
+        "bucket_id"
+      ],
+      "type": "object"
+    },
+    "name": "kanban_delete_bucket"
+  },
+  {
+    "description": "Get the kanban view for a project",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "project_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "project_id"
+      ],
+      "type": "object"
+    },
+    "name": "kanban_get"
+  },
+  {
+    "description": "List kanban buckets in a view",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "project_id": {
+          "type": "integer"
+        },
+        "view_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "project_id",
+        "view_id"
+      ],
+      "type": "object"
+    },
+    "name": "kanban_list_buckets"
+  },
+  {
+    "description": "Set up a kanban board with exactly the requested columns, one call, idempotent",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "columns": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "delete_default_buckets": {
+          "type": [
+            "null",
+            "boolean"
+          ]
+        },
+        "project_id": {
+          "type": "integer"
+        },
+        "project_title": {
+          "type": "string"
+        },
+        "view_title": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "kanban_setup"
+  },
+  {
+    "description": "Re-sort all tasks in a bucket",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "bucket_id": {
+          "type": "integer"
+        },
+        "project_id": {
+          "type": "integer"
+        },
+        "sort_by": {
+          "type": "string"
+        },
+        "then_by": {
+          "type": "string"
+        },
+        "view_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "project_id",
+        "view_id",
+        "bucket_id"
+      ],
+      "type": "object"
+    },
+    "name": "kanban_sort_bucket"
+  },
+  {
+    "description": "Get tasks grouped by kanban bucket",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "project_id": {
+          "type": "integer"
+        },
+        "view_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "project_id",
+        "view_id"
+      ],
+      "type": "object"
+    },
+    "name": "kanban_tasks_by_bucket"
+  },
+  {
+    "description": "Create a label",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "hex_color": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "type": "object"
+    },
+    "name": "label_create"
+  },
+  {
+    "description": "Delete a label",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "label_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "label_id"
+      ],
+      "type": "object"
+    },
+    "name": "label_delete"
+  },
+  {
+    "description": "List all labels",
+    "inputSchema": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "name": "label_list"
+  },
+  {
+    "description": "Analyze project data to discover meaningful grouping dimensions",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "project_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "project_id"
+      ],
+      "type": "object"
+    },
+    "name": "project_analyze"
+  },
+  {
+    "description": "Create a project",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "type": "object"
+    },
+    "name": "project_create"
+  },
+  {
+    "description": "Create a project from a template with exactly the requested kanban columns",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "type": "object"
+    },
+    "name": "project_create_from_template"
+  },
+  {
+    "description": "Delete a project and all its tasks permanently",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirm": {
+          "type": "boolean"
+        },
+        "project_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "project_id",
+        "confirm"
+      ],
+      "type": "object"
+    },
+    "name": "project_delete"
+  },
+  {
+    "description": "Export all projects and tasks for backup",
+    "inputSchema": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "name": "project_export"
+  },
+  {
+    "description": "Get project details",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "project_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "project_id"
+      ],
+      "type": "object"
+    },
+    "name": "project_get"
+  },
+  {
+    "description": "Import projects from an export file",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "export_json": {
+          "type": "string"
+        },
+        "skip_existing": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "export_json"
+      ],
+      "type": "object"
+    },
+    "name": "project_import"
+  },
+  {
+    "description": "List projects on the current instance",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "instance": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "project_list"
+  },
+  {
+    "description": "List projects across all configured instances",
+    "inputSchema": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "name": "project_list_all"
+  },
+  {
+    "description": "Set up a project with buckets, labels, and tasks in one call",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "buckets": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "project_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "project_id"
+      ],
+      "type": "object"
+    },
+    "name": "project_setup"
+  },
+  {
+    "description": "Share a project with a user; resolves user_id/username pair automatically (Vikunja needs both)",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "permission": {
+          "type": "integer"
+        },
+        "project_id": {
+          "type": "integer"
+        },
+        "user_id": {
+          "type": "integer"
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_id"
+      ],
+      "type": "object"
+    },
+    "name": "project_share"
+  },
+  {
+    "description": "Share a project with a team, list team shares, or revoke access (action: share|list|revoke; permission 0=read 1=write 2=admin)",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "permission": {
+          "type": "integer"
+        },
+        "project_id": {
+          "type": "integer"
+        },
+        "team_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "project_id"
+      ],
+      "type": "object"
+    },
+    "name": "project_share_team"
+  },
+  {
+    "description": "Update a project",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "project_id": {
+          "type": "integer"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_id"
+      ],
+      "type": "object"
+    },
+    "name": "project_update"
+  },
+  {
+    "description": "Search tasks and projects across instances",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "type": "integer"
+        },
+        "query": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "type": "object"
+    },
+    "name": "search_all"
+  },
+  {
+    "description": "List tasks across instances with filters",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "include_completed": {
+          "type": "boolean"
+        },
+        "limit": {
+          "type": "integer"
+        },
+        "project_id": {
+          "type": "integer"
+        },
+        "query": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "type": "object"
+    },
+    "name": "search_all_tasks"
+  },
+  {
+    "description": "Add a label to a task",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "label_id": {
+          "type": "integer"
+        },
+        "task_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "task_id",
+        "label_id"
+      ],
+      "type": "object"
+    },
+    "name": "task_add_label"
+  },
+  {
+    "description": "Assign a user to a task",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "task_id": {
+          "type": "integer"
+        },
+        "user_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "task_id",
+        "user_id"
+      ],
+      "type": "object"
+    },
+    "name": "task_assign_user"
+  },
+  {
+    "description": "Fetch multiple tasks concurrently, results in request order",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "concurrency": {
+          "type": "integer"
+        },
+        "task_ids": {
+          "items": {
+            "type": "integer"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "task_ids"
+      ],
+      "type": "object"
+    },
+    "name": "task_batch_get"
+  },
+  {
+    "description": "Atomically close a task: done, done bucket, verification GET",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "task_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "task_id"
+      ],
+      "type": "object"
+    },
+    "name": "task_complete"
+  },
+  {
+    "description": "Create a task in a project",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "due_date": {
+          "type": "string"
+        },
+        "end_date": {
+          "type": "string"
+        },
+        "priority": {
+          "type": "integer"
+        },
+        "project_id": {
+          "type": "integer"
+        },
+        "repeat_after": {
+          "type": "integer"
+        },
+        "repeat_mode": {
+          "type": "integer"
+        },
+        "start_date": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_id",
+        "title"
+      ],
+      "type": "object"
+    },
+    "name": "task_create"
+  },
+  {
+    "description": "Create a relation between two tasks",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "other_task_id": {
+          "type": "integer"
+        },
+        "relation_kind": {
+          "type": "string"
+        },
+        "task_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "task_id",
+        "relation_kind",
+        "other_task_id"
+      ],
+      "type": "object"
+    },
+    "name": "task_create_relation"
+  },
+  {
+    "description": "Delete a task permanently",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "task_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "task_id"
+      ],
+      "type": "object"
+    },
+    "name": "task_delete"
+  },
+  {
+    "description": "Get task details",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "task_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "task_id"
+      ],
+      "type": "object"
+    },
+    "name": "task_get"
+  },
+  {
+    "description": "List tasks in a project",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "include_completed": {
+          "type": "boolean"
+        },
+        "label_filter": {
+          "type": "string"
+        },
+        "project_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "project_id"
+      ],
+      "type": "object"
+    },
+    "name": "task_list"
+  },
+  {
+    "description": "List relations of a task",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "task_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "task_id"
+      ],
+      "type": "object"
+    },
+    "name": "task_list_relations"
+  },
+  {
+    "description": "Move a task to a different project",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "target_project_id": {
+          "type": "integer"
+        },
+        "task_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "task_id",
+        "target_project_id"
+      ],
+      "type": "object"
+    },
+    "name": "task_move"
+  },
+  {
+    "description": "Query tasks by mode: focus, due-today, due-week, overdue, high-priority, urgent, unscheduled, summary",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "instance": {
+          "type": "string"
+        },
+        "limit": {
+          "type": "integer"
+        },
+        "project_id": {
+          "type": "integer"
+        },
+        "query": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "type": "object"
+    },
+    "name": "task_query"
+  },
+  {
+    "description": "Move a task to a kanban bucket",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "apply_sort": {
+          "type": "boolean"
+        },
+        "bucket_id": {
+          "type": "integer"
+        },
+        "project_id": {
+          "type": "integer"
+        },
+        "task_id": {
+          "type": "integer"
+        },
+        "view_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "task_id",
+        "project_id",
+        "view_id",
+        "bucket_id"
+      ],
+      "type": "object"
+    },
+    "name": "task_set_position"
+  },
+  {
+    "description": "Replace all reminders on a task",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "reminders": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "task_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "task_id",
+        "reminders"
+      ],
+      "type": "object"
+    },
+    "name": "task_set_reminders"
+  },
+  {
+    "description": "Remove a user from a task",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "task_id": {
+          "type": "integer"
+        },
+        "user_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "task_id",
+        "user_id"
+      ],
+      "type": "object"
+    },
+    "name": "task_unassign_user"
+  },
+  {
+    "description": "Partially update a task; merges server-side so omitted fields keep their values",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "due_date": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "end_date": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "priority": {
+          "type": [
+            "null",
+            "integer"
+          ]
+        },
+        "start_date": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "task_id": {
+          "type": "integer"
+        },
+        "title": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "task_id"
+      ],
+      "type": "object"
+    },
+    "name": "task_update"
+  },
+  {
+    "description": "Create a team (PUT semantics: creator becomes admin)",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "instance": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "teams_create"
+  },
+  {
+    "description": "Delete a team permanently",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "instance": {
+          "type": "string"
+        },
+        "team_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "team_id"
+      ],
+      "type": "object"
+    },
+    "name": "teams_delete"
+  },
+  {
+    "description": "List all teams the authenticated user belongs to",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "instance": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "teams_list"
+  },
+  {
+    "description": "Add a user to a team by username",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "instance": {
+          "type": "string"
+        },
+        "team_id": {
+          "type": "integer"
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "team_id",
+        "username"
+      ],
+      "type": "object"
+    },
+    "name": "teams_member_add"
+  },
+  {
+    "description": "Remove a user from a team by username",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "instance": {
+          "type": "string"
+        },
+        "team_id": {
+          "type": "integer"
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "team_id",
+        "username"
+      ],
+      "type": "object"
+    },
+    "name": "teams_member_remove"
+  },
+  {
+    "description": "Search teams by name substring",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "instance": {
+          "type": "string"
+        },
+        "query": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "type": "object"
+    },
+    "name": "teams_search"
+  },
+  {
+    "description": "Update a team name or description",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "instance": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "team_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "team_id"
+      ],
+      "type": "object"
+    },
+    "name": "teams_update"
+  },
+  {
+    "description": "Scored, clustered candidates for today under named intents, each with a numeric score and a why trace",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "intent_filter": {
+          "type": "string"
+        },
+        "limit": {
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "today_actions"
+  },
+  {
+    "description": "Read the current effective scoring weights",
+    "inputSchema": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "name": "today_get_weights"
+  },
+  {
+    "description": "Weekly kill list: tasks deferred N+ times, loudest first",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "threshold": {
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "today_reckoning"
+  },
+  {
+    "description": "Retune deterministic scoring weights at runtime, per user",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "weights": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "type": "object"
+        }
+      },
+      "required": [
+        "weights"
+      ],
+      "type": "object"
+    },
+    "name": "today_set_weights"
+  },
+  {
+    "description": "Defer a task with a mandatory reason; dread deferrals demand a date and escalate on return",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "comment": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "task_id": {
+          "type": "integer"
+        },
+        "until": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "name": "today_snooze"
+  },
+  {
+    "description": "Park a whole speculative project tree aside in one gesture; reversible, never deletes",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "project_id": {
+          "type": "integer"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_id"
+      ],
+      "type": "object"
+    },
+    "name": "triage_park"
+  },
+  {
+    "description": "List currently parked project trees",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "project_id": {
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "triage_parked"
+  },
+  {
+    "description": "Create a view for a project",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "filter_query": {
+          "type": "string"
+        },
+        "project_id": {
+          "type": "integer"
+        },
+        "title": {
+          "type": "string"
+        },
+        "view_kind": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_id",
+        "title",
+        "view_kind"
+      ],
+      "type": "object"
+    },
+    "name": "view_create"
+  },
+  {
+    "description": "Delete a view from a project",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "project_id": {
+          "type": "integer"
+        },
+        "view_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "project_id",
+        "view_id"
+      ],
+      "type": "object"
+    },
+    "name": "view_delete"
+  },
+  {
+    "description": "Get tasks via a specific view; kanban includes bucket info",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "project_id": {
+          "type": "integer"
+        },
+        "view_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "project_id",
+        "view_id"
+      ],
+      "type": "object"
+    },
+    "name": "view_get_tasks"
+  },
+  {
+    "description": "List all views for a project",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "project_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "project_id"
+      ],
+      "type": "object"
+    },
+    "name": "view_list"
+  },
+  {
+    "description": "Set a task position within a list, gantt, or table view",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "position": {
+          "type": "number"
+        },
+        "task_id": {
+          "type": "integer"
+        },
+        "view_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "task_id",
+        "view_id",
+        "position"
+      ],
+      "type": "object"
+    },
+    "name": "view_set_position"
+  },
+  {
+    "description": "Update a view title or filter",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "filter_query": {
+          "type": "string"
+        },
+        "project_id": {
+          "type": "integer"
+        },
+        "title": {
+          "type": "string"
+        },
+        "view_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "project_id",
+        "view_id"
+      ],
+      "type": "object"
+    },
+    "name": "view_update"
+  }
+]
