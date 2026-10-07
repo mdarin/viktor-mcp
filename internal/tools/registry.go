@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -12,6 +13,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"viktor/internal/client"
+	"viktor/internal/shadow"
 )
 
 type toolStats struct {
@@ -39,6 +41,10 @@ type Registry struct {
 	stats       map[string]*toolStats
 	logger      *slog.Logger
 	toolTimeout time.Duration
+
+	shadowStore   *shadow.Store
+	reachable     atomic.Bool
+	lastProbe     atomic.Int64
 }
 
 func NewRegistry(server *mcp.Server, api *client.Client) *Registry {
@@ -46,6 +52,7 @@ func NewRegistry(server *mcp.Server, api *client.Client) *Registry {
 	r.apiPtr.Store(api)
 	r.clients = map[string]*client.Client{"default": api}
 	r.active = "default"
+	r.reachable.Store(true)
 	return r
 }
 
@@ -172,6 +179,21 @@ func instrument[In, Out any](r *Registry, name string, h mcp.ToolHandlerFor[In, 
 		st := r.statsFor(name)
 		st.calls.Add(1)
 		result, out, err := h(ctx, req, in)
+		if err != nil && errors.Is(err, client.ErrUnreachable) {
+			if _, isWrite := shadowWriteScope[name]; isWrite {
+				result, out, err = handleUnreachable[In, Out](r, name, in, err)
+			} else if shadowReadScope[name] && !r.probe(ctx) {
+				result, out, err = serveMirror[Out](r, name, in)
+			} else if !shadowReadScope[name] {
+				result, out, err = handleUnreachable[In, Out](r, name, in, err)
+			}
+		} else if err == nil {
+			if !r.reachable.Load() {
+				// A call succeeded while we thought we were offline: re-probe
+				// on next opportunity and report the restored connection.
+				r.markReachable(true)
+			}
+		}
 		elapsed := time.Since(start)
 		st.nanos.Add(int64(elapsed))
 		status := "ok"
@@ -210,6 +232,7 @@ func (r *Registry) RegisterAll() {
 	registerSearch(r)
 	registerInstance(r)
 	registerConfig(r)
+	registerShadow(r)
 	registerCalendar(r)
 	registerAssign(r)
 	registerTeams(r)

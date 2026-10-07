@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -96,4 +97,113 @@ func (s *Store) TaskKeys(projectID int64, projectTitle string) ([]string, error)
 // DeleteProject removes a mirrored project directory (after successful sync).
 func (s *Store) DeleteProject(id int64, title string) error {
 	return os.RemoveAll(s.ProjectDir(id, title))
+}
+
+// FindProjectByID locates a mirrored project directory by id.
+func (s *Store) FindProjectByID(id int64) (ProjectRef, bool) {
+	entries, err := os.ReadDir(s.projectsRoot())
+	if err != nil {
+		return ProjectRef{}, false
+	}
+	prefix := strconv.FormatInt(id, 10) + "-"
+	for _, e := range entries {
+		if !e.IsDir() || !strings.HasPrefix(e.Name(), prefix) {
+			continue
+		}
+		var ref ProjectRef
+		data, err := os.ReadFile(filepath.Join(s.projectsRoot(), e.Name(), "project.json"))
+		if err != nil {
+			// Fall back to the directory name.
+			title := strings.TrimPrefix(e.Name(), prefix)
+			return ProjectRef{ID: id, Slug: e.Name(), Title: title}, true
+		}
+		if json.Unmarshal(data, &ref) == nil && ref.ID == id {
+			return ref, true
+		}
+	}
+	return ProjectRef{}, false
+}
+
+// TasksOfProject loads all task snapshots of a mirrored project.
+func (s *Store) TasksOfProject(ref ProjectRef) []TaskSnapshot {
+	keys, err := s.TaskKeys(ref.ID, ref.Title)
+	if err != nil {
+		return nil
+	}
+	var out []TaskSnapshot
+	for _, k := range keys {
+		var snap TaskSnapshot
+		if s.LoadTask(ref.ID, ref.Title, k, &snap) == nil {
+			out = append(out, snap)
+		}
+	}
+	return out
+}
+
+// FindTask searches all mirrored projects for a task by remote id or shadow id.
+func (s *Store) FindTask(idOrShadow string) (TaskSnapshot, int64, string, bool) {
+	entries, err := os.ReadDir(s.projectsRoot())
+	if err != nil {
+		return TaskSnapshot{}, 0, "", false
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		var ref ProjectRef
+		data, err := os.ReadFile(filepath.Join(s.projectsRoot(), e.Name(), "project.json"))
+		if err == nil {
+			_ = json.Unmarshal(data, &ref)
+		}
+		if ref.ID == 0 {
+			if n, perr := strconv.ParseInt(e.Name(), 10, 64); perr == nil {
+				ref.ID = n
+			} else if idx := strings.Index(e.Name(), "-"); idx > 0 {
+				ref.ID, _ = strconv.ParseInt(e.Name()[:idx], 10, 64)
+				ref.Title = strings.TrimPrefix(e.Name(), e.Name()[:idx+1])
+			}
+		}
+		var snap TaskSnapshot
+		if s.LoadTask(ref.ID, ref.Title, idOrShadow, &snap) == nil {
+			return snap, ref.ID, ref.Title, true
+		}
+		for _, k := range mustTaskKeys(s, ref) {
+			if k == idOrShadow {
+				continue
+			}
+		}
+	}
+	// Second pass: match by shadow id inside snapshots.
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		ref, ok := dirRef(e.Name())
+		if !ok {
+			continue
+		}
+		for _, snap := range s.TasksOfProject(ref) {
+			if snap.ShadowID == idOrShadow || fmt.Sprint(snap.ID) == idOrShadow {
+				return snap, ref.ID, ref.Title, true
+			}
+		}
+	}
+	return TaskSnapshot{}, 0, "", false
+}
+
+func mustTaskKeys(s *Store, ref ProjectRef) []string {
+	keys, _ := s.TaskKeys(ref.ID, ref.Title)
+	return keys
+}
+
+func dirRef(name string) (ProjectRef, bool) {
+	idx := strings.Index(name, "-")
+	if idx <= 0 {
+		return ProjectRef{}, false
+	}
+	id, err := strconv.ParseInt(name[:idx], 10, 64)
+	if err != nil {
+		return ProjectRef{}, false
+	}
+	return ProjectRef{ID: id, Slug: name, Title: strings.TrimPrefix(name, name[:idx+1])}, true
 }

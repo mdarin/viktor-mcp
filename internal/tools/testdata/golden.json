@@ -1239,6 +1239,48 @@
     "name": "search_all_tasks"
   },
   {
+    "description": "Remove already-synced entries from the shadow journal",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "instance": {
+          "description": "optional instance name",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "shadow_clear"
+  },
+  {
+    "description": "Show shadow-mode state: online/offline, pending queue size, mirror root",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "instance": {
+          "description": "optional instance name",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "shadow_status"
+  },
+  {
+    "description": "Probe the tracker and report shadow-queue synchronization state",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "instance": {
+          "description": "optional instance name",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "shadow_sync"
+  },
+  {
     "description": "Add a label to a task",
     "inputSchema": {
       "additionalProperties": false,

@@ -17,7 +17,7 @@ cmd/viktor/          точка входа (stdio-сервер)
 internal/config/     конфигурация: env + JSON-файл, multi-instance, секреты
 internal/client/     REST-клиент Vikunja (auth, ретраи, rate-limit, читаемые ошибки, пагинация, NullTime)
 internal/scoring/    детерминированный scoring-движок (веса today_*; без LLM)
-internal/tools/      реестр MCP-инструментов: имя → схема → handler (91 namespaced)
+internal/tools/      реестр MCP-инструментов: имя → схема → handler (94 namespaced)
 internal/server/     сборка MCP-сервера, slog-наблюдаемость
 docs/adr/            архитектурные решения
 ```
@@ -61,7 +61,7 @@ printf '%s\n%s\n%s\n' \
   | VIKUNJA_URL=http://localhost:13456 VIKUNJA_TOKEN=tk_... ./bin/viktor
 ```
 
-Вторая строка ответа — 91 инструмент.
+Вторая строка ответа — 94 инструмента.
 
 ## Конфигурация
 
@@ -145,7 +145,7 @@ printf '%s\n%s\n%s\n' \
 
 ## Tool surface
 
-91 namespaced-инструмента — полный перенос upstream `main` (`task_*`, `project_*`, `today_*`, `batch_*`, `kanban_*`, `view_*`, `label_*`, `comment_*`, `teams_*`, `search_*`, `instance_*`, `ctx_*`, `config_*`, `cal_add_event`, `assign_*`, `triage_*`) + `task_batch_get` (конкурентные чтения) и `project_share_team` (шаринг на команды).
+94 namespaced-инструмента — полный перенос upstream `main` (`task_*`, `project_*`, `today_*`, `batch_*`, `kanban_*`, `view_*`, `label_*`, `comment_*`, `teams_*`, `search_*`, `instance_*`, `ctx_*`, `config_*`, `cal_add_event`, `assign_*`, `triage_*`) + `task_batch_get` (конкурентные чтения) и `project_share_team` (шаринг на команды).
 
 Golden-тест фиксирует снапшот сёрфейса (`internal/tools/testdata/golden.json`) и падает при любом дрейфе; обновление после намеренного изменения:
 
@@ -216,6 +216,9 @@ go test ./internal/tools -update-snapshot
 | `project_update` | Update a project |
 | `search_all` | Search tasks and projects across instances |
 | `search_all_tasks` | List tasks across instances with filters |
+| `shadow_clear` | Remove already-synced entries from the shadow journal |
+| `shadow_status` | Show shadow-mode state: online/offline, pending queue size, mirror root |
+| `shadow_sync` | Probe the tracker and report shadow-queue synchronization state |
 | `task_add_label` | Add a label to a task |
 | `task_assign_user` | Assign a user to a task |
 | `task_batch_get` | Fetch multiple tasks concurrently, results in request order |
@@ -290,7 +293,7 @@ Observability: каждый вызов инструмента пишет JSON-л
 
 ## Статус
 
-Перенос завершён: stdio-сервер (91 tool, unit + golden + live-тесты), REST-клиент
+Перенос завершён: stdio-сервер (94 tool, unit + golden + live-тесты), REST-клиент
 с ретраями/rate-limit/пагинацией, scoring-движок, multi-instance конфиг,
 наблюдаемость (slog + счётчики + таймауты), конкурентный `task_batch_get`,
 шаринг на пользователей и команды. Проверено против реального Vikunja v2.6.0.

@@ -11,6 +11,7 @@ import (
 
 	"viktor/internal/client"
 	"viktor/internal/config"
+	"viktor/internal/shadow"
 	"viktor/internal/tools"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -63,8 +64,14 @@ func Build(_ context.Context, stdout io.Writer) (*mcp.Server, *tools.Registry, e
 
 	registry := tools.NewRegistry(server, active)
 	registry.SetInstances(clients, cfg.DefaultInstance)
-	registry.SetLogger(buildLogger())
+	logger := buildLogger()
+	registry.SetLogger(logger)
 	registry.SetToolTimeout(toolTimeout())
+	if store, err := shadow.NewStore("", cfg.DefaultInstance); err == nil {
+		registry.SetShadowStore(store)
+	} else {
+		logger.Warn("shadow mode disabled: store init failed", slog.Any("error", err))
+	}
 	registry.RegisterAll()
 
 	defaultURL := cfg.Instances[cfg.DefaultInstance].URL
