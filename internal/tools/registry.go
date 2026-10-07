@@ -188,11 +188,8 @@ func instrument[In, Out any](r *Registry, name string, h mcp.ToolHandlerFor[In, 
 				result, out, err = handleUnreachable[In, Out](r, name, in, err)
 			}
 		} else if err == nil {
-			if !r.reachable.Load() {
-				// A call succeeded while we thought we were offline: re-probe
-				// on next opportunity and report the restored connection.
-				r.markReachable(true)
-			}
+			// A call succeeded: update reachability; auto-sync on restore.
+			r.noteReachable(ctx, true)
 		}
 		elapsed := time.Since(start)
 		st.nanos.Add(int64(elapsed))

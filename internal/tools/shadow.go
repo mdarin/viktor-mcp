@@ -50,6 +50,33 @@ func (r *Registry) markReachable(ok bool) {
 	}
 }
 
+// noteReachable updates reachability and, on restore with a non-empty queue,
+// replays the shadow journal onto the tracker (shadow #359).
+func (r *Registry) noteReachable(ctx context.Context, ok bool) {
+	if r.shadowStore == nil {
+		if !ok {
+			r.markReachable(false)
+		} else {
+			r.reachable.Store(true)
+		}
+		return
+	}
+	prev := r.reachable.Swap(ok)
+	if ok && !prev && r.shadowStore.PendingCount() > 0 {
+		r.logInfo("shadow: connection restored — replaying queue", "pending", r.shadowStore.PendingCount())
+		_ = r.syncShadow(ctx)
+		return
+	}
+	if prev == ok {
+		return
+	}
+	if ok {
+		r.logInfo("shadow: connection restored", "pending", r.shadowPending())
+	} else {
+		r.logInfo("shadow: tracker unreachable — shadow mode active", "pending", r.shadowPending())
+	}
+}
+
 func (r *Registry) logInfo(msg string, args ...any) {
 	if r.logger != nil {
 		r.logger.Info(msg, args...)
@@ -79,7 +106,7 @@ func (r *Registry) probe(ctx context.Context) bool {
 	if _, err := r.api().Info(pctx); err == nil {
 		ok = true
 	}
-	r.markReachable(ok)
+	r.noteReachable(ctx, ok)
 	return ok
 }
 

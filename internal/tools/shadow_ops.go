@@ -69,14 +69,28 @@ func handleShadowSync(r *Registry) mcp.ToolHandlerFor[ShadowStatusIn, any] {
 			return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(out)}}}, nil, nil
 		}
 		pending := r.shadowStore.PendingCount()
-		msg := "queue is empty — nothing to sync"
-		if pending > 0 {
-			msg = "tracker is reachable; replay engine lands with shadow #359 — queue preserved"
+		if pending == 0 {
+			out, _ := json.MarshalIndent(map[string]any{
+				"synced":  true,
+				"pending": 0,
+				"message": "queue is empty — nothing to sync",
+			}, "", "  ")
+			return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(out)}}}, nil, nil
 		}
+		report := r.syncShadow(ctx)
 		out, _ := json.MarshalIndent(map[string]any{
-			"synced":  pending == 0,
-			"pending": pending,
-			"message": msg,
+			"synced":           report.Pending == 0,
+			"pending":          report.Pending,
+			"replayed":         report.Replayed,
+			"created":          report.Created,
+			"updated":          report.Updated,
+			"completed":        report.Completed,
+			"labels":           report.Labels,
+			"comments":         report.Comments,
+			"deduplicated":     report.Deduplicated,
+			"deleted_shadowed": report.DeletedShadowed,
+			"conflicts":        report.Conflicts,
+			"failed":           report.Failed,
 		}, "", "  ")
 		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(out)}}}, nil, nil
 	}

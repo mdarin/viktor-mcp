@@ -94,6 +94,11 @@ func (s *Store) TaskKeys(projectID int64, projectTitle string) ([]string, error)
 	return keys, nil
 }
 
+// DeleteTask removes a task snapshot from the mirror.
+func (s *Store) DeleteTask(projectID int64, projectTitle, key string) error {
+	return os.Remove(filepath.Join(s.ProjectDir(projectID, projectTitle), "tasks", key+".json"))
+}
+
 // DeleteProject removes a mirrored project directory (after successful sync).
 func (s *Store) DeleteProject(id int64, title string) error {
 	return os.RemoveAll(s.ProjectDir(id, title))
