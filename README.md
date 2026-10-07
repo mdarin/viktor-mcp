@@ -257,6 +257,36 @@ go test ./internal/tools -update-snapshot
 | `view_update` | Update a view title or filter |
 <!-- tools:end -->
 
+## Offline mode (shadow)
+
+Когда Vikunja недоступен (connection refused / DNS / TLS, но не HTTP-ошибки),
+viktor не падает, а переключается в теневой режим:
+
+- **Write** (`task_create`, `task_update`, `task_complete`, `task_add_label`,
+  `comment_add`, `batch_create_tasks`, `batch_update_tasks`, `batch_relabel`,
+  `batch_complete_by_label`) — операция дописывается в append-only журнал и
+  возвращается ответ `{"shadowed": true, "shadow_id": "s-N", ...}` без ошибки.
+- **Read** (`task_get`, `task_list`) — отдаётся локальное зеркало с пометкой
+  `shadowed_data: true`; если карточки нет в зеркале — внятная ошибка
+  «tracker unreachable».
+- Остальные инструменты при offline отвечают ошибкой «not supported offline».
+
+Состояние хранится в `~/.local/state/viktor/shadow/<instance>/`:
+`queue.jsonl` (append-only журнал операций: `{shadow_id, ts, op, project_id,
+payload, status, remote_id}`) и зеркала `projects/<id>-<slug>/`
+(`project.md` — читаемое рендер-зеркало, `tasks/*.json` — снапшоты).
+
+Синхронизация (`shadow_sync` или автоматически при первом успешном вызове
+после восстановления связи): журнал реплеится по порядку. `create` дедуплицируется
+по fingerprint (project + title + due_date), `update` мержится по полям, при
+конфликте (карточку меняли на трекере после записи в журнал) локальные правки
+применяются, но конфликт фиксируется в отчёте. Ответ — структурированный отчёт
+`{replayed, created, updated, completed, labels, comments, deduplicated,
+deleted_shadowed, pending, conflicts, failed}`. Внесённые на доску теневые
+карточки удаляются из зеркала, `project.md` перегенерируется, пустые зеркала
+проектов удаляются. `shadow_status` показывает режим и очередь, `shadow_clear`
+вычищает synced-записи журнала.
+
 ## Live-интеграция и ловушки Vikunja v2.6.0
 
 Сервер проверен против реального Vikunja v2.6.0. Нестандартности, учтённые в клиенте:
