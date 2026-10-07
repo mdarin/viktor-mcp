@@ -126,7 +126,7 @@ func (c *Client) Do(ctx context.Context, r request) error {
 		}
 		var apiErr *APIError
 		if !errors.As(err, &apiErr) {
-			return err
+			return classifyUnreachable(ctx, err)
 		}
 		if apiErr.StatusCode != http.StatusTooManyRequests && apiErr.StatusCode < 500 {
 			return err
