@@ -159,3 +159,34 @@ func (c *QdrantClient) Count(ctx context.Context, name string) (int64, error) {
 	}
 	return info.Result.PointsCount, nil
 }
+
+// SearchHit is one result of a vector search.
+type SearchHit struct {
+	Score   float64        `json:"score"`
+	Payload map[string]any `json:"payload"`
+}
+
+type searchFilter struct {
+	Must []map[string]any `json:"must,omitempty"`
+}
+
+type searchBody struct {
+	Vector      []float32     `json:"vector"`
+	Limit       int           `json:"limit"`
+	WithPayload bool          `json:"with_payload"`
+	Filter      *searchFilter `json:"filter,omitempty"`
+}
+
+type searchResult struct {
+	Result []SearchHit `json:"result"`
+}
+
+// SearchPoints runs a kNN search with an optional payload filter.
+func (c *QdrantClient) SearchPoints(ctx context.Context, name string, vector []float32, k int, filter *searchFilter) ([]SearchHit, error) {
+	body := searchBody{Vector: vector, Limit: k, WithPayload: true, Filter: filter}
+	var out searchResult
+	if err := c.do(ctx, http.MethodPost, "/collections/"+name+"/points/search", body, &out); err != nil {
+		return nil, err
+	}
+	return out.Result, nil
+}

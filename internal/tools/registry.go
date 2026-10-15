@@ -13,6 +13,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"viktor/internal/client"
+	"viktor/internal/memory"
 	"viktor/internal/shadow"
 )
 
@@ -42,9 +43,11 @@ type Registry struct {
 	logger      *slog.Logger
 	toolTimeout time.Duration
 
-	shadowStore   *shadow.Store
-	reachable     atomic.Bool
-	lastProbe     atomic.Int64
+	shadowStore *shadow.Store
+	reachable   atomic.Bool
+	lastProbe   atomic.Int64
+
+	memoryCfgs map[string]memory.Config
 }
 
 func NewRegistry(server *mcp.Server, api *client.Client) *Registry {
@@ -233,4 +236,5 @@ func (r *Registry) RegisterAll() {
 	registerCalendar(r)
 	registerAssign(r)
 	registerTeams(r)
+	registerMemory(r)
 }

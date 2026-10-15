@@ -67,6 +67,19 @@ func status(done bool) string {
 	return "open"
 }
 
+// maxSnippet caps the text preview stored in the payload for search
+// results (the full text lives in the vector only).
+const maxSnippet = 280
+
+// snippet is the text preview for search results.
+func snippet(text string) string {
+	runes := []rune(strings.TrimSpace(text))
+	if len(runes) <= maxSnippet {
+		return string(runes)
+	}
+	return string(runes[:maxSnippet]) + "…"
+}
+
 // ChunkTask splits a task into one task chunk plus one chunk per comment.
 // Both chunk types carry task_id in the payload — the join key to
 // viktor task_get and git log --grep.
@@ -94,6 +107,7 @@ func ChunkTask(t Task, comments []Comment, commits []string) []Chunk {
 			"labels":     labels,
 			"updated_at": t.Updated,
 			"chunk_type": string(ChunkTypeTask),
+			"snippet":    snippet(text),
 		},
 	}
 	if len(commits) > 0 {
@@ -125,6 +139,7 @@ func ChunkTask(t Task, comments []Comment, commits []string) []Chunk {
 				"labels":     labels,
 				"updated_at": t.Updated,
 				"chunk_type": string(ChunkTypeComment),
+				"snippet":    snippet(ct),
 			},
 		})
 	}
@@ -155,6 +170,7 @@ func ChunkCommit(c CommitRecord) Chunk {
 		"author":     c.Author,
 		"date":       c.Date,
 		"chunk_type": string(ChunkTypeCommit),
+		"snippet":    snippet(c.Subject),
 	}
 	if len(files) > 0 {
 		payload["files"] = files

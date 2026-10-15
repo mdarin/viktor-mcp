@@ -960,6 +960,47 @@
     "name": "label_list"
   },
   {
+    "description": "Semantic search over project memory (Vikunja tasks, comments, repo commits). Use for 'why/зачем' questions and historical context; returns task_id/title/snippet/status/commits/chunk_type",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "instance": {
+          "type": "string"
+        },
+        "k": {
+          "type": "integer"
+        },
+        "labels": {
+          "type": "string"
+        },
+        "project_id": {
+          "type": "integer"
+        },
+        "query": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "type": "object"
+    },
+    "name": "memory_search"
+  },
+  {
+    "description": "Semantic memory index status: points, cursor, embed model",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "instance": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "memory_status"
+  },
+  {
     "description": "Analyze project data to discover meaningful grouping dimensions",
     "inputSchema": {
       "additionalProperties": false,

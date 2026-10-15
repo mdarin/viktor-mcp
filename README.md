@@ -201,6 +201,8 @@ go test ./internal/tools -update-snapshot
 | `label_create` | Create a label |
 | `label_delete` | Delete a label |
 | `label_list` | List all labels |
+| `memory_search` | Semantic search over project memory (Vikunja tasks, comments, repo commits). Use for 'why/зачем' questions and historical context; returns task_id/title/snippet/status/commits/chunk_type |
+| `memory_status` | Semantic memory index status: points, cursor, embed model |
 | `project_analyze` | Analyze project data to discover meaningful grouping dimensions |
 | `project_create` | Create a project |
 | `project_create_from_template` | Create a project from a template with exactly the requested kanban columns |
