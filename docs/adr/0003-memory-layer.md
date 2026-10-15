@@ -36,8 +36,10 @@ graceful degradation.
 ### Коллекция
 
 Одна коллекция `viktor_tasks`. Чанк = задача целиком
-(title + description + status + labels) или отдельный комментарий.
-Payload каждого чанка:
+(title + description + status + labels), отдельный комментарий или
+отдельный коммит репозитория (subject + files; коммиты — immutable,
+ключ чанка = sha; в payload.task_ids попадают id задач из сообщения
+коммита — мост от истории кода к доске). Payload каждого чанка:
 
 ```json
 {

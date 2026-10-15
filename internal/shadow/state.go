@@ -129,6 +129,30 @@ func (s *Store) FindProjectByID(id int64) (ProjectRef, bool) {
 	return ProjectRef{}, false
 }
 
+// Projects lists all mirrored projects.
+func (s *Store) Projects() []ProjectRef {
+	entries, err := os.ReadDir(s.projectsRoot())
+	if err != nil {
+		return nil
+	}
+	var out []ProjectRef
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		var ref ProjectRef
+		data, err := os.ReadFile(filepath.Join(s.projectsRoot(), e.Name(), "project.json"))
+		if err == nil && json.Unmarshal(data, &ref) == nil && ref.ID != 0 {
+			out = append(out, ref)
+			continue
+		}
+		if ref, ok := dirRef(e.Name()); ok {
+			out = append(out, ref)
+		}
+	}
+	return out
+}
+
 // TasksOfProject loads all task snapshots of a mirrored project.
 func (s *Store) TasksOfProject(ref ProjectRef) []TaskSnapshot {
 	keys, err := s.TaskKeys(ref.ID, ref.Title)

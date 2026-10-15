@@ -1,0 +1,261 @@
+package memory
+
+import (
+	"context"
+	"fmt"
+	"strings"
+)
+
+// Report summarizes one sync run.
+type Report struct {
+	Source       string `json:"source"`
+	TasksScanned int    `json:"tasks_scanned"`
+	ChunksTotal  int    `json:"chunks_total"`
+	Upserted     int    `json:"upserted"`
+	Deleted      int    `json:"deleted"`
+	Skipped      int    `json:"skipped"` // chunks unchanged since last sync
+	Commits      int    `json:"commits"` // commit chunks upserted this run
+	Cursor       string `json:"cursor"`
+	Enriched     int    `json:"enriched"` // tasks with git commit enrichment
+}
+
+// Indexer syncs tracker tasks into the vector store.
+type Indexer struct {
+	cfg       Config
+	source    TaskSource
+	embedder  Embedder
+	store     VectorStore
+	git       GitEnricher
+	state     *syncState
+	statePath string
+}
+
+// NewIndexer wires the indexer. statePath may be empty to disable
+// persistence (used by tests).
+func NewIndexer(cfg Config, source TaskSource, embedder Embedder, store VectorStore, git GitEnricher, statePath string) (*Indexer, error) {
+	cfg.normalize()
+	if err := cfg.validate(); err != nil {
+		return nil, err
+	}
+	if statePath == "" {
+		return nil, fmt.Errorf("memory: state path is required")
+	}
+	st, err := loadState(statePath)
+	if err != nil {
+		return nil, fmt.Errorf("memory: load state: %w", err)
+	}
+	return &Indexer{
+		cfg:       cfg,
+		source:    source,
+		embedder:  embedder,
+		store:     store,
+		git:       git,
+		state:     st,
+		statePath: statePath,
+	}, nil
+}
+
+const embedBatch = 32
+
+// Sync performs one incremental pass: fetch tasks, chunk, embed only
+// changed chunks, upsert, delete points of vanished entities, persist
+// state. The repository history (when a git enricher is wired) is
+// indexed as commit chunks alongside the board (ADR 0003: task, comment
+// and commit chunks in one collection). A repeat sync with no changes
+// performs zero upserts (DoD).
+func (ix *Indexer) Sync(ctx context.Context) (*Report, error) {
+	tasks, err := ix.source.AllTasks(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("memory: fetch tasks: %w", err)
+	}
+
+	report := &Report{Source: ix.source.Name(), TasksScanned: len(tasks)}
+
+	type pending struct {
+		chunk Chunk
+		id    uint64
+	}
+	var pendingUpserts []pending
+	seenKeys := map[string]bool{}
+
+	cursor := ""
+	for _, t := range tasks {
+		if t.Updated > cursor {
+			cursor = t.Updated
+		}
+
+		var commits []CommitInfo
+		if ix.git != nil && ix.cfg.GitRepo != "" {
+			cs, err := ix.git.Commits(ctx, t.ID)
+			if err != nil {
+				// Enrichment is best-effort; a broken repo must not stop sync.
+				commits = nil
+			} else {
+				commits = cs
+			}
+		}
+
+		comments, err := ix.source.Comments(ctx, t.ID)
+		if err != nil {
+			// Comments are best-effort as well: index the task body regardless.
+			comments = nil
+		}
+
+		for _, chunk := range ChunkTask(t, comments, shas(commits)) {
+			seenKeys[chunk.Key] = true
+			if chunk.Type == ChunkTypeTask && len(commits) > 0 {
+				chunk.Payload["files"] = touchedFiles(commits)
+				report.Enriched++
+			}
+			h := hashText(chunk.Text)
+			if ix.state.Hashes[chunk.Key] == h {
+				report.Skipped++
+				continue
+			}
+			pendingUpserts = append(pendingUpserts, pending{chunk: chunk, id: pointID(ix.cfg.Instance, chunk.Key)})
+		}
+	}
+
+	// Commit chunks: every commit of the repo becomes a chunk, so search
+	// can answer "why" questions from commit messages, not only the board.
+	// Commits are immutable, hence hash-compare makes repeat syncs free.
+	if cs, ok := ix.git.(CommitSource); ok && cs != nil {
+		commits, err := cs.AllCommits(ctx)
+		if err != nil {
+			// History indexing is best-effort: the board projection must
+			// not fail because of a broken repo.
+			commits = nil
+		}
+		for _, c := range commits {
+			chunk := ChunkCommit(c)
+			seenKeys[chunk.Key] = true
+			h := hashText(chunk.Text)
+			if ix.state.Hashes[chunk.Key] == h {
+				report.Skipped++
+				continue
+			}
+			report.Commits++
+			pendingUpserts = append(pendingUpserts, pending{chunk: chunk, id: pointID(ix.cfg.Instance, chunk.Key)})
+		}
+	}
+
+	// Points of tasks that disappeared from the scan are removed so the
+	// index never outlives the tracker (deleted tasks leave no ghosts).
+	var doomed []uint64
+	for key := range ix.state.Hashes {
+		if !seenKeys[key] {
+			doomed = append(doomed, pointID(ix.cfg.Instance, key))
+			delete(ix.state.Hashes, key)
+		}
+	}
+	if len(doomed) > 0 {
+		if err := ix.store.DeletePoints(ctx, ix.cfg.Collection, doomed); err != nil {
+			return nil, fmt.Errorf("memory: delete stale points: %w", err)
+		}
+		report.Deleted = len(doomed)
+	}
+
+	if len(pendingUpserts) > 0 {
+		if err := ix.ensureCollection(ctx, pendingUpserts[0].chunk.Text); err != nil {
+			return nil, err
+		}
+		for start := 0; start < len(pendingUpserts); start += embedBatch {
+			end := start + embedBatch
+			if end > len(pendingUpserts) {
+				end = len(pendingUpserts)
+			}
+			batch := pendingUpserts[start:end]
+			texts := make([]string, len(batch))
+			for i, p := range batch {
+				texts[i] = p.chunk.Text
+			}
+			vectors, err := ix.embedder.Embed(ctx, ix.cfg.EmbedModel, texts)
+			if err != nil {
+				return nil, fmt.Errorf("memory: embed: %w", err)
+			}
+			points := make([]Point, len(batch))
+			for i, p := range batch {
+				points[i] = Point{ID: p.id, Vector: vectors[i], Payload: p.chunk.Payload}
+			}
+			if err := ix.store.Upsert(ctx, ix.cfg.Collection, points); err != nil {
+				return nil, fmt.Errorf("memory: upsert: %w", err)
+			}
+			report.Upserted += len(points)
+			for _, p := range batch {
+				ix.state.Hashes[p.chunk.Key] = hashText(p.chunk.Text)
+			}
+		}
+	}
+
+	report.ChunksTotal = len(seenKeys)
+	report.Cursor = cursor
+	ix.state.Cursor = cursor
+
+	// Only persist state after every remote write succeeded, so a failed
+	// sync retries the same upserts next run.
+	if err := ix.state.save(ix.statePath); err != nil {
+		return nil, fmt.Errorf("memory: save state: %w", err)
+	}
+	return report, nil
+}
+
+// ensureCollection creates the collection on first upsert, deriving the
+// vector dimension from the embedder instead of hardcoding it.
+func (ix *Indexer) ensureCollection(ctx context.Context, sampleText string) error {
+	exists, err := ix.store.CollectionExists(ctx, ix.cfg.Collection)
+	if err != nil {
+		return fmt.Errorf("memory: check collection: %w", err)
+	}
+	if exists {
+		return nil
+	}
+	vectors, err := ix.embedder.Embed(ctx, ix.cfg.EmbedModel, []string{sampleText})
+	if err != nil {
+		return fmt.Errorf("memory: probe dimension: %w", err)
+	}
+	if len(vectors) == 0 || len(vectors[0]) == 0 {
+		return fmt.Errorf("memory: embedder returned empty vector")
+	}
+	if err := ix.store.CreateCollection(ctx, ix.cfg.Collection, len(vectors[0])); err != nil {
+		return fmt.Errorf("memory: create collection: %w", err)
+	}
+	return nil
+}
+
+// Status returns index freshness info for memory_status.
+type Status struct {
+	Collection string `json:"collection"`
+	Points     int64  `json:"points"`
+	Cursor     string `json:"cursor"`
+	EmbedModel string `json:"embed_model"`
+	State      string `json:"state"`
+}
+
+// Status reads the current index state.
+func (ix *Indexer) Status(ctx context.Context) (*Status, error) {
+	st := &Status{
+		Collection: ix.cfg.Collection,
+		Cursor:     ix.state.Cursor,
+		EmbedModel: ix.cfg.EmbedModel,
+	}
+	count, err := ix.store.Count(ctx, ix.cfg.Collection)
+	if err != nil {
+		st.State = "unavailable: " + err.Error()
+	} else {
+		st.Points = count
+		st.State = "ok"
+	}
+	if st.Cursor == "" && len(ix.state.Hashes) == 0 {
+		st.State = "not synced yet"
+	}
+	return st, nil
+}
+
+// TrimCursor normalizes a Vikunja timestamp for comparisons; empty or
+// zero-value dates are treated as "".
+func TrimCursor(s string) string {
+	if strings.HasPrefix(s, "0001-01-01") {
+		return ""
+	}
+	return strings.TrimSpace(s)
+}
