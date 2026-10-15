@@ -161,3 +161,54 @@ func TestLoadDefaultInstanceUnknown(t *testing.T) {
 		t.Error("want error for unknown default instance")
 	}
 }
+
+func TestLoadMemorySection(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	content := `{
+		"default_instance": "work",
+		"instances": {"work": {"url": "http://x", "token": "tk"}},
+		"memory": {
+			"qdrant_url": "http://q:6333",
+			"ollama_url": "http://o:11434",
+			"embed_model": "bge-m3",
+			"collection": "viktor_tasks",
+			"git_enrich": {"work": "/repo/work", "other": "/repo/other"}
+		}
+	}`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := load(env("VIKUNJA_URL=http://x", "VIKUNJA_TOKEN=tk"), path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := cfg.Memory
+	if m == nil {
+		t.Fatal("memory section must be parsed")
+	}
+	if m.QdrantURL != "http://q:6333" || m.OllamaURL != "http://o:11434" || m.EmbedModel != "bge-m3" || m.Collection != "viktor_tasks" {
+		t.Fatalf("memory = %+v", m)
+	}
+	if m.RepoFor("work") != "/repo/work" || m.RepoFor("missing") != "" {
+		t.Fatalf("git_enrich = %v", m.GitEnrich)
+	}
+}
+
+func TestLoadMemorySectionAbsent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	content := `{"instances": {"default": {"url": "http://x", "token": "tk"}}}`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := load(env("VIKUNJA_URL=http://x", "VIKUNJA_TOKEN=tk"), path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Memory != nil {
+		t.Fatalf("absent section must stay nil, got %+v", cfg.Memory)
+	}
+	// Nil section is safe to query.
+	if cfg.Memory.Qdrant() != "" || cfg.Memory.RepoFor("any") != "" {
+		t.Fatal("nil section accessors must be zero")
+	}
+}

@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"viktor/internal/config"
 )
 
 func TestBuildE2EToolsList(t *testing.T) {
@@ -56,9 +58,36 @@ func TestBuildE2EToolsList(t *testing.T) {
 	for _, tl := range tools {
 		names[tl.Name] = true
 	}
-	for _, want := range []string{"task_create", "project_list", "today_actions", "kanban_setup"} {
+	for _, want := range []string{"task_create", "project_list", "today_actions", "kanban_setup", "memory_search", "memory_status"} {
 		if !names[want] {
 			t.Errorf("missing tool %q", want)
 		}
+	}
+}
+
+func TestMemoryPerInstance(t *testing.T) {
+	cfg := &config.Config{
+		DefaultInstance: "work",
+		Instances: map[string]*config.Instance{
+			"work":  {URL: "http://a"},
+			"other": {URL: "http://b"},
+			"third": {URL: "http://c"},
+		},
+		Memory: &config.MemorySection{
+			EmbedModel: "bge-m3",
+			GitEnrich:  map[string]string{"work": "/repo/work"},
+		},
+	}
+	got := memoryPerInstance(cfg)
+	if len(got) != 3 {
+		t.Fatalf("configs = %d, want one per instance", len(got))
+	}
+	w := got["work"]
+	if w.EmbedModel != "bge-m3" || w.Collection != "viktor_tasks" || w.GitRepo != "/repo/work" {
+		t.Fatalf("work = %+v", w)
+	}
+	// Instance without git_enrich keeps indexing, just without history.
+	if o := got["other"]; o.GitRepo != "" || o.QdrantURL != "http://localhost:6333" {
+		t.Fatalf("other = %+v", o)
 	}
 }

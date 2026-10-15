@@ -22,15 +22,76 @@ type Instance struct {
 	RateLimit float64
 }
 
+// MemorySection is the semantic memory layer configuration (ADR 0003).
+// Absent section → memory tools answer "not configured" and the CLI
+// sync fails with a hint; nil is a valid, degraded state.
+type MemorySection struct {
+	QdrantURL  string
+	OllamaURL  string
+	EmbedModel string
+	Collection string
+	// GitEnrich maps instance name → path to the git repo whose commit
+	// history enriches that instance's task memory. Per-instance by
+	// design: multi-instance setups track different repos.
+	GitEnrich map[string]string
+}
+
+// Nil-safe accessors: a nil section means "memory not configured" and
+// yields empty values, letting callers chain config → env → defaults.
+func (m *MemorySection) Qdrant() string {
+	if m == nil {
+		return ""
+	}
+	return m.QdrantURL
+}
+
+func (m *MemorySection) Ollama() string {
+	if m == nil {
+		return ""
+	}
+	return m.OllamaURL
+}
+
+func (m *MemorySection) Model() string {
+	if m == nil {
+		return ""
+	}
+	return m.EmbedModel
+}
+
+func (m *MemorySection) Coll() string {
+	if m == nil {
+		return ""
+	}
+	return m.Collection
+}
+
+func (m *MemorySection) RepoFor(instance string) string {
+	if m == nil {
+		return ""
+	}
+	return m.GitEnrich[instance]
+}
+
 type Config struct {
 	Path            string
 	DefaultInstance string
 	Instances       map[string]*Instance
+	Memory          *MemorySection
 }
 
 type fileConfig struct {
 	DefaultInstance string                    `json:"default_instance"`
 	Instances       map[string]fileInstanceIn `json:"instances"`
+	Memory          *fileMemoryIn             `json:"memory"`
+}
+
+type fileMemoryIn struct {
+	QdrantURL  string            `json:"qdrant_url"`
+	OllamaURL  string            `json:"ollama_url"`
+	EmbedModel string            `json:"embed_model"`
+	Collection string            `json:"collection"`
+	GitEnrich  map[string]string `json:"git_enrich"`
 }
 
 type fileInstanceIn struct {
@@ -138,6 +199,15 @@ func (c *Config) applyFile(fc *fileConfig) error {
 	}
 	if fc.DefaultInstance != "" && c.DefaultInstance == "" {
 		c.DefaultInstance = fc.DefaultInstance
+	}
+	if fc.Memory != nil {
+		c.Memory = &MemorySection{
+			QdrantURL:  fc.Memory.QdrantURL,
+			OllamaURL:  fc.Memory.OllamaURL,
+			EmbedModel: fc.Memory.EmbedModel,
+			Collection: fc.Memory.Collection,
+			GitEnrich:  fc.Memory.GitEnrich,
+		}
 	}
 	return nil
 }

@@ -84,6 +84,29 @@ printf '%s\n%s\n%s\n' \
 (и опционально `__TIMEOUT`, `__RATE_LIMIT`). Активный инстанс — `VIKUNJA_DEFAULT_INSTANCE`
 или `default_instance` из файла; переключение в рантайме — tool `instance_switch`.
 
+### Секция memory (опциональна)
+
+Семантическая память (ADR 0003): `memory_search`/`memory_status` и CLI
+`viktor memory sync|status`. Без секции инструменты отвечают
+`{supported:false}`, CLI — ошибку с подсказкой:
+
+```json
+{
+  "memory": {
+    "qdrant_url": "http://localhost:6333",
+    "ollama_url": "http://localhost:11434",
+    "embed_model": "bge-m3",
+    "collection": "viktor_tasks",
+    "git_enrich": {"main": "/path/to/repo"}
+  }
+}
+```
+
+`git_enrich` — карта инстанс → путь к git-репо: история коммитов
+инстанса (`#<task_id>` в сообщениях) попадает в память задачи.
+Пропущенные поля берут дефолты (`bge-m3`, `viktor_tasks`, localhost).
+CLI-приоритет: флаг > `VIKTOR_MEMORY_*` env > секция `memory`.
+
 | Переменная                | Обязательна | По умолчанию          | Описание                                   |
 |---------------------------|-------------|-----------------------|--------------------------------------------|
 | `VIKUNJA_URL`             | да*         | —                     | Базовый URL Vikunja (инстанс `default`)    |

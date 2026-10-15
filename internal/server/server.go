@@ -11,6 +11,7 @@ import (
 
 	"viktor/internal/client"
 	"viktor/internal/config"
+	"viktor/internal/memory"
 	"viktor/internal/shadow"
 	"viktor/internal/tools"
 
@@ -72,11 +73,32 @@ func Build(_ context.Context, stdout io.Writer) (*mcp.Server, *tools.Registry, e
 	} else {
 		logger.Warn("shadow mode disabled: store init failed", slog.Any("error", err))
 	}
+	if cfg.Memory != nil {
+		registry.SetMemoryConfigs(memoryPerInstance(cfg))
+	}
 	registry.RegisterAll()
 
 	defaultURL := cfg.Instances[cfg.DefaultInstance].URL
 	_, _ = fmt.Fprintf(stdout, "viktor %s: connecting to %s (instance %q, %d configured)\n", client.Version, defaultURL, cfg.DefaultInstance, len(cfg.Instances))
 	return server, registry, nil
+}
+
+// memoryPerInstance expands the global memory section into per-instance
+// memory configs; instances without a git_enrich entry get no repo
+// history but keep task/comment indexing.
+func memoryPerInstance(cfg *config.Config) map[string]memory.Config {
+	out := make(map[string]memory.Config, len(cfg.Instances))
+	for name := range cfg.Instances {
+		out[name] = memory.Config{
+			Instance:   name,
+			QdrantURL:  cfg.Memory.QdrantURL,
+			OllamaURL:  cfg.Memory.OllamaURL,
+			EmbedModel: cfg.Memory.EmbedModel,
+			Collection: cfg.Memory.Collection,
+			GitRepo:    cfg.Memory.GitEnrich[name],
+		}.WithDefaults()
+	}
+	return out
 }
 
 func Run(ctx context.Context, stdout io.Writer) error {

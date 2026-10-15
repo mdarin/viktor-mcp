@@ -40,6 +40,13 @@ func (c *Config) normalize() {
 	}
 }
 
+// WithDefaults returns a normalized copy — exported for tool handlers
+// and server wiring that build a Config straight from user config.
+func (c Config) WithDefaults() Config {
+	c.normalize()
+	return c
+}
+
 func (c *Config) validate() error {
 	if c.Collection == "" {
 		return fmt.Errorf("memory: collection name is required")

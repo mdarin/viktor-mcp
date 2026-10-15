@@ -86,13 +86,44 @@ func runMemory(ctx context.Context, args []string) error {
 		return fmt.Errorf("instance %q is not configured", instName)
 	}
 
+	// Precedence: explicit flag > VIKTOR_MEMORY_* env > config "memory"
+	// section > built-in defaults. git_enrich in the section is the only
+	// way to point a non-default instance at its repo.
+	explicit := map[string]string{}
+	fs.Visit(func(f *flag.Flag) {
+		switch f.Name {
+		case "qdrant":
+			explicit["qdrant"] = *qdrant
+		case "ollama":
+			explicit["ollama"] = *ollama
+		case "model":
+			explicit["model"] = *model
+		case "collection":
+			explicit["collection"] = *collection
+		case "repo":
+			explicit["repo"] = *repo
+		}
+	})
+	var memSection *config.MemorySection
+	if cfg.Memory != nil {
+		memSection = cfg.Memory
+	}
+	pick := func(flagName, envKey, cfgVal string) string {
+		if v, ok := explicit[flagName]; ok {
+			return v
+		}
+		if v := os.Getenv(envKey); v != "" {
+			return v
+		}
+		return cfgVal
+	}
 	memCfg := memory.Config{
 		Instance:   instName,
-		QdrantURL:  *qdrant,
-		OllamaURL:  *ollama,
-		EmbedModel: *model,
-		Collection: *collection,
-		GitRepo:    *repo,
+		QdrantURL:  pick("qdrant", "VIKTOR_MEMORY_QDRANT_URL", memSection.Qdrant()),
+		OllamaURL:  pick("ollama", "VIKTOR_MEMORY_OLLAMA_URL", memSection.Ollama()),
+		EmbedModel: pick("model", "VIKTOR_MEMORY_EMBED_MODEL", memSection.Model()),
+		Collection: pick("collection", "VIKTOR_MEMORY_COLLECTION", memSection.Coll()),
+		GitRepo:    pick("repo", "VIKTOR_MEMORY_GIT_REPO", memSection.RepoFor(instName)),
 	}
 	if memCfg.GitRepo == "" {
 		// "Index the current repository": repo history joins the board
@@ -100,6 +131,13 @@ func runMemory(ctx context.Context, args []string) error {
 		if wd, err := os.Getwd(); err == nil {
 			memCfg.GitRepo = wd
 		}
+	}
+	memCfg = memCfg.WithDefaults()
+
+	// Card #47 contract: no memory section and no env/flag overrides →
+	// a clear error with a hint, not a silent localhost run.
+	if cfg.Memory == nil && len(explicit) == 0 && !hasMemoryEnv() {
+		return fmt.Errorf("memory is not configured: add a \"memory\" section to %s (see .env.example) or set VIKTOR_MEMORY_* env / pass -qdrant/-ollama flags", config.DefaultPath())
 	}
 
 	api := client.New(inst.URL, inst.Token, inst.Timeout).SetRateLimit(inst.RateLimit)
@@ -145,6 +183,15 @@ func envOr(key, def string) string {
 		return v
 	}
 	return def
+}
+
+func hasMemoryEnv() bool {
+	for _, e := range os.Environ() {
+		if k, _, ok := strings.Cut(e, "="); ok && strings.HasPrefix(k, "VIKTOR_MEMORY_") {
+			return true
+		}
+	}
+	return false
 }
 
 // loadDotenv applies KEY=VALUE pairs from a .env file to the environment
