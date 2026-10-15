@@ -1416,6 +1416,9 @@
         "end_date": {
           "type": "string"
         },
+        "hex_color": {
+          "type": "string"
+        },
         "priority": {
           "type": "integer"
         },
@@ -1677,6 +1680,12 @@
           ]
         },
         "end_date": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "hex_color": {
           "type": [
             "null",
             "string"

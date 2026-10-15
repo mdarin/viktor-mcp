@@ -18,6 +18,7 @@ type TaskUpdateIn struct {
 	StartDate   *string `json:"start_date,omitempty"`
 	EndDate     *string `json:"end_date,omitempty"`
 	Priority    *int    `json:"priority,omitempty"`
+	HexColor    *string `json:"hex_color,omitempty"`
 }
 
 func parseNullableDate(name, raw string) (client.NullTime, error) {
@@ -29,6 +30,24 @@ func parseNullableDate(name, raw string) (client.NullTime, error) {
 		return client.NullTime{}, fmt.Errorf("%s: need RFC3339 (e.g. 2026-10-05T12:00:00Z), got %q", name, raw)
 	}
 	return client.NullTime{Time: ts, Valid: true}, nil
+}
+
+func validHexColor(s string) bool {
+	if s == "" {
+		return true
+	}
+	if len(s) != 4 && len(s) != 7 {
+		return false
+	}
+	if s[0] != '#' {
+		return false
+	}
+	for _, c := range s[1:] {
+		if !('0' <= c && c <= '9' || 'a' <= c && c <= 'f' || 'A' <= c && c <= 'F') {
+			return false
+		}
+	}
+	return true
 }
 
 func mergeTaskUpdate(current map[string]any, patch TaskUpdateIn) (map[string]any, error) {
@@ -64,6 +83,13 @@ func mergeTaskUpdate(current map[string]any, patch TaskUpdateIn) (map[string]any
 	}
 	if patch.Priority != nil {
 		merged["priority"] = *patch.Priority
+	}
+	if patch.HexColor != nil {
+		if !validHexColor(*patch.HexColor) {
+			return nil, fmt.Errorf("hex_color: need #RGB or #RRGGBB (or empty to clear), got %q", *patch.HexColor)
+		}
+		// "" clears the color; Vikunja stores hex_color verbatim.
+		merged["hex_color"] = *patch.HexColor
 	}
 	return merged, nil
 }

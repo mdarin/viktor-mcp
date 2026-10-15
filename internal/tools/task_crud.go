@@ -13,7 +13,7 @@ import (
 const zeroDate = "0001-01-01T00:00:00Z"
 
 func trimTask(m map[string]any) map[string]any {
-	keys := []string{"id", "title", "description", "done", "due_date", "start_date", "priority", "project_id", "bucket_id", "labels", "assignees", "reminders"}
+	keys := []string{"id", "title", "description", "done", "due_date", "start_date", "priority", "project_id", "bucket_id", "labels", "assignees", "reminders", "hex_color"}
 	out := make(map[string]any, len(keys))
 	for _, k := range keys {
 		if v, ok := m[k]; ok {
@@ -63,6 +63,12 @@ func handleTaskCreate(r *Registry) mcp.ToolHandlerFor[TaskCreateIn, any] {
 		}
 		if in.RepeatMode != 0 {
 			body["repeat_mode"] = in.RepeatMode
+		}
+		if in.HexColor != "" {
+			if !validHexColor(in.HexColor) {
+				return nil, nil, fmt.Errorf("hex_color: need #RGB or #RRGGBB, got %q", in.HexColor)
+			}
+			body["hex_color"] = in.HexColor
 		}
 		var created map[string]any
 		if err := r.api().CreateTask(ctx, in.ProjectID, body, &created); err != nil {

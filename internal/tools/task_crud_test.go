@@ -181,7 +181,7 @@ func (f *fakeCRUD) handler(w http.ResponseWriter, r *http.Request) {
 		json.NewDecoder(r.Body).Decode(&b)
 		f.moveBodies = append(f.moveBodies, b)
 		if t, ok := f.tasks[id]; ok {
-			for _, key := range []string{"reminders", "title", "description", "priority", "due_date", "done"} {
+			for _, key := range []string{"reminders", "title", "description", "priority", "due_date", "done", "hex_color"} {
 				if v, has := b[key]; has {
 					t[key] = v
 				}
@@ -265,6 +265,9 @@ func (f *fakeCRUD) handler(w http.ResponseWriter, r *http.Request) {
 		created := map[string]any{"id": float64(f.nextID), "title": b["title"], "done": false, "priority": b["priority"], "project_id": 8}
 		if d, ok := b["due_date"]; ok {
 			created["due_date"] = d
+		}
+		if d, ok := b["hex_color"]; ok {
+			created["hex_color"] = d
 		}
 		f.tasks[f.nextID] = created
 		json.NewEncoder(w).Encode(created)
@@ -755,5 +758,60 @@ func TestTaskQuerySummaryAndUnknown(t *testing.T) {
 	}
 	if _, err := callCRUD(t, session, "task_query", map[string]any{"query": "bogus"}); err == nil {
 		t.Fatal("unknown mode must be rejected")
+	}
+}
+
+func TestTaskCreateHexColor(t *testing.T) {
+	f, session := newCRUDFixture(t)
+	out, err := callCRUD(t, session, "task_create", map[string]any{
+		"project_id": 8, "title": "colored", "hex_color": "#8b5cf6",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out["hex_color"] != "#8b5cf6" {
+		t.Fatalf("hex_color = %v", out["hex_color"])
+	}
+	if f.tasks[f.nextID]["hex_color"] != "#8b5cf6" {
+		t.Fatalf("body hex_color = %v", f.tasks[f.nextID]["hex_color"])
+	}
+	for _, bad := range []string{"8b5cf6", "#8b5c", "#zzzzzz", "#"} {
+		if _, err := callCRUD(t, session, "task_create", map[string]any{
+			"project_id": 8, "title": "bad", "hex_color": bad,
+		}); err == nil {
+			t.Fatalf("hex_color %q must be rejected", bad)
+		}
+	}
+}
+
+func TestTaskUpdateHexColor(t *testing.T) {
+	f, session := newCRUDFixture(t)
+	// Set.
+	if _, err := callCRUD(t, session, "task_update", map[string]any{
+		"task_id": 301, "hex_color": "#ff0000",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.tasks[301]["hex_color"]; got != "#ff0000" {
+		t.Fatalf("hex_color = %v", got)
+	}
+	// Merge semantics: other fields survive the GET→patch→POST roundtrip.
+	if f.tasks[301]["title"] == nil || f.tasks[301]["done"] == nil {
+		t.Fatalf("merge lost unrelated fields: %v", f.tasks[301])
+	}
+	// Clear with empty string.
+	if _, err := callCRUD(t, session, "task_update", map[string]any{
+		"task_id": 301, "hex_color": "",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := f.tasks[301]["hex_color"]; !ok || got != "" {
+		t.Fatalf("clear: hex_color = %v (present=%v)", got, ok)
+	}
+	// Invalid rejected client-side, no POST fired.
+	if _, err := callCRUD(t, session, "task_update", map[string]any{
+		"task_id": 301, "hex_color": "red",
+	}); err == nil {
+		t.Fatal("invalid hex_color must be rejected")
 	}
 }

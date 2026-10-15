@@ -27,6 +27,7 @@ type TaskCreateIn struct {
 	StartDate   time.Time `json:"start_date,omitempty"`
 	EndDate     time.Time `json:"end_date,omitempty"`
 	Priority    int       `json:"priority,omitempty"`
+	HexColor    string    `json:"hex_color,omitempty"`
 	RepeatAfter int       `json:"repeat_after,omitempty"`
 	RepeatMode  int       `json:"repeat_mode,omitempty"`
 }
