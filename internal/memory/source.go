@@ -174,3 +174,7 @@ func hashText(text string) string {
 func statePath(root, instance string) string {
 	return filepath.Join(root, "memory", instance, "sync.json")
 }
+
+// FNV64a is the exported stable 64-bit hash used for deterministic
+// Qdrant point IDs.
+func FNV64a(s string) uint64 { return fnv64a(s) }

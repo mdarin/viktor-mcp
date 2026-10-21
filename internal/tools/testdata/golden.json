@@ -2089,6 +2089,29 @@
     "name": "triage_parked"
   },
   {
+    "description": "Verify the submitted git diff against the task's semantic anchors in Qdrant (hybrid: similarity + exact matches); drift queues a Shadow Task",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "instance": {
+          "type": "string"
+        },
+        "repo": {
+          "description": "path to the git repo with the submitted work (default: working directory)",
+          "type": "string"
+        },
+        "task_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "task_id"
+      ],
+      "type": "object"
+    },
+    "name": "verify_review"
+  },
+  {
     "description": "Create a view for a project",
     "inputSchema": {
       "additionalProperties": false,

@@ -46,8 +46,8 @@ func TestBuildE2EToolsList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(res.Tools) != 102 {
-		t.Errorf("tools/list = %d, want 102", len(res.Tools))
+	if len(res.Tools) != 103 {
+		t.Errorf("tools/list = %d, want 103", len(res.Tools))
 	}
 	names := map[string]bool{}
 	raw, _ := json.Marshal(res.Tools)

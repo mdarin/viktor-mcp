@@ -239,4 +239,5 @@ func (r *Registry) RegisterAll() {
 	registerMemory(r)
 	registerFsm(r)
 	registerWatchdog(r)
+	registerVerifier(r)
 }

@@ -278,6 +278,7 @@ go test ./internal/tools -update-snapshot
 | `today_snooze` | Defer a task with a mandatory reason; dread deferrals demand a date and escalate on return |
 | `triage_park` | Park a whole speculative project tree aside in one gesture; reversible, never deletes |
 | `triage_parked` | List currently parked project trees |
+| `verify_review` | Verify the submitted git diff against the task's semantic anchors in Qdrant (hybrid: similarity + exact matches); drift queues a Shadow Task |
 | `view_create` | Create a view for a project |
 | `view_delete` | Delete a view from a project |
 | `view_get_tasks` | Get tasks via a specific view; kanban includes bucket info |

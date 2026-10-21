@@ -31,6 +31,10 @@ type fakeCRUD struct {
 	nextLabel  int
 	comments   map[int][]string
 	teamShares map[int]map[int]float64
+	// verifier fixture hooks (tools/verifier_test.go)
+	registry       *Registry
+	verifierTaskID int
+	verifierRepo   string
 }
 
 func (f *fakeCRUD) filteredTasks(filter string) []map[string]any {
@@ -553,7 +557,9 @@ func newCRUDFixture(t *testing.T) (*fakeCRUD, *mcp.ClientSession) {
 
 	api := client.New(srv.URL, "test-token", 0)
 	srvMCP := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "0.0.0"}, nil)
-	NewRegistry(srvMCP, api).RegisterAll()
+	registry := NewRegistry(srvMCP, api)
+	f.registry = registry
+	registry.RegisterAll()
 
 	ctx := context.Background()
 	c := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "0.0.0"}, nil)

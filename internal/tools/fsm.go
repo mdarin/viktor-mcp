@@ -88,11 +88,11 @@ type ClaimTaskIn struct {
 }
 
 type FSMTaskOut struct {
-	TaskID    int    `json:"task_id"`
-	State     string `json:"state"`
-	RequestID string `json:"request_id,omitempty"`
-	Actor     string `json:"actor,omitempty"`
-	Replayed  bool   `json:"replayed"`
+	TaskID    int      `json:"task_id"`
+	State     string   `json:"state"`
+	RequestID string   `json:"request_id,omitempty"`
+	Actor     string   `json:"actor,omitempty"`
+	Replayed  bool     `json:"replayed"`
 	Allowed   []string `json:"allowed_next"`
 }
 
@@ -128,12 +128,12 @@ func handleClaimTask(r *Registry) mcp.ToolHandlerFor[ClaimTaskIn, any] {
 }
 
 type SubmitForReviewIn struct {
-	TaskID   int    `json:"task_id"`
+	TaskID    int    `json:"task_id"`
 	RequestID string `json:"request_id,omitempty" jsonschema:"unique request id for idempotent submit"`
-	Actor    string `json:"actor,omitempty"`
-	Repo     string `json:"repo,omitempty" jsonschema:"path to the git repo with the work artifacts; validated before the transition"`
-	Note     string `json:"note,omitempty"`
-	Instance string `json:"instance,omitempty"`
+	Actor     string `json:"actor,omitempty"`
+	Repo      string `json:"repo,omitempty" jsonschema:"path to the git repo with the work artifacts; validated before the transition"`
+	Note      string `json:"note,omitempty"`
+	Instance  string `json:"instance,omitempty"`
 }
 
 func handleSubmitForReview(r *Registry) mcp.ToolHandlerFor[SubmitForReviewIn, any] {
@@ -170,16 +170,20 @@ func handleSubmitForReview(r *Registry) mcp.ToolHandlerFor[SubmitForReviewIn, an
 		if err := s.StoreIdempotent(ctx, inst, in.RequestID, "submit_for_review", out); err != nil {
 			return nil, nil, err
 		}
+		// Semantic Verifier (card #57): the diff is checked in the
+		// background; a drift queues a Shadow Task correction. The
+		// review response never waits for it.
+		r.verifyAsync(inst, in.TaskID, repo)
 		return nil, out, nil
 	}
 }
 
 type FSMStateIn struct {
-	TaskID   int    `json:"task_id"`
-	To       string `json:"to,omitempty" jsonschema:"target state; empty = report current state only"`
+	TaskID    int    `json:"task_id"`
+	To        string `json:"to,omitempty" jsonschema:"target state; empty = report current state only"`
 	RequestID string `json:"request_id,omitempty"`
-	Actor    string `json:"actor,omitempty"`
-	Instance string `json:"instance,omitempty"`
+	Actor     string `json:"actor,omitempty"`
+	Instance  string `json:"instance,omitempty"`
 }
 
 func handleFSMState(r *Registry) mcp.ToolHandlerFor[FSMStateIn, any] {

@@ -40,7 +40,7 @@ type Searcher struct {
 
 // VectorSearcher is the read side of the vector store.
 type VectorSearcher interface {
-	SearchPoints(ctx context.Context, name string, vector []float32, k int, filter *searchFilter) ([]SearchHit, error)
+	SearchPoints(ctx context.Context, name string, vector []float32, k int, filter *SearchFilter) ([]SearchHit, error)
 }
 
 // NewSearcher wires a read-only search path.
@@ -68,9 +68,9 @@ func (s *Searcher) Search(ctx context.Context, query string, opts SearchOpts) ([
 	if len(vectors) == 0 {
 		return nil, fmt.Errorf("memory: embedder returned no vector")
 	}
-	var filter *searchFilter
+	var filter *SearchFilter
 	if opts.ProjectID != 0 || len(opts.Labels) > 0 {
-		filter = &searchFilter{}
+		filter = &SearchFilter{}
 		if opts.ProjectID != 0 {
 			filter.Must = append(filter.Must, map[string]any{
 				"key": "project_id", "match": map[string]any{"value": opts.ProjectID},

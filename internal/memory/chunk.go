@@ -186,3 +186,6 @@ func ChunkCommit(c CommitRecord) Chunk {
 		Payload: payload,
 	}
 }
+
+// Snippet is the exported text preview used by cross-package indexers.
+func Snippet(text string) string { return snippet(text) }

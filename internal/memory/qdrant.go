@@ -173,7 +173,9 @@ type SearchHit struct {
 	Payload map[string]any `json:"payload"`
 }
 
-type searchFilter struct {
+// SearchFilter is a Qdrant filter over point payloads (exported for
+// reuse by the semantic verifier).
+type SearchFilter struct {
 	Must []map[string]any `json:"must,omitempty"`
 }
 
@@ -181,7 +183,7 @@ type searchBody struct {
 	Vector      []float32     `json:"vector"`
 	Limit       int           `json:"limit"`
 	WithPayload bool          `json:"with_payload"`
-	Filter      *searchFilter `json:"filter,omitempty"`
+	Filter      *SearchFilter `json:"filter,omitempty"`
 }
 
 type searchResult struct {
@@ -189,7 +191,7 @@ type searchResult struct {
 }
 
 // SearchPoints runs a kNN search with an optional payload filter.
-func (c *QdrantClient) SearchPoints(ctx context.Context, name string, vector []float32, k int, filter *searchFilter) ([]SearchHit, error) {
+func (c *QdrantClient) SearchPoints(ctx context.Context, name string, vector []float32, k int, filter *SearchFilter) ([]SearchHit, error) {
 	body := searchBody{Vector: vector, Limit: k, WithPayload: true, Filter: filter}
 	var out searchResult
 	if err := c.do(ctx, http.MethodPost, "/collections/"+name+"/points/search", body, &out); err != nil {
