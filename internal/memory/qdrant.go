@@ -30,13 +30,17 @@ type Point struct {
 // QdrantClient is a thin client for the Qdrant REST API.
 type QdrantClient struct {
 	baseURL string
+	apiKey  string
 	http    *http.Client
 }
 
-// NewQdrant creates a Qdrant client.
-func NewQdrant(baseURL string) *QdrantClient {
+// NewQdrant creates a Qdrant client. apiKey may be empty for unsecured
+// instances; when set it is sent as the `api-key` header (Qdrant cloud /
+// Helm chart service_api_key).
+func NewQdrant(baseURL, apiKey string) *QdrantClient {
 	return &QdrantClient{
 		baseURL: strings.TrimRight(baseURL, "/"),
+		apiKey:  apiKey,
 		http:    &http.Client{Timeout: 60 * time.Second},
 	}
 }
@@ -69,6 +73,9 @@ func (c *QdrantClient) do(ctx context.Context, method, path string, body, out an
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if c.apiKey != "" {
+		req.Header.Set("api-key", c.apiKey)
+	}
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return fmt.Errorf("memory: qdrant %s: %w", path, err)

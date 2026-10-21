@@ -13,6 +13,6 @@ CREATE TABLE search_history (
 );
 
 -- BM25-индекс (карточка AC: индекс создаётся при подъеме стенда).
+-- key_field не задаём: ParadeDB ≥0.26 объявил параметр deprecated no-op.
 CREATE INDEX search_history_bm25 ON search_history
-USING bm25 (id, content, kind)
-WITH (key_field = 'id');
+USING bm25 (id, content, kind);

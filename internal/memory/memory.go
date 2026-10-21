@@ -19,7 +19,10 @@ type Config struct {
 	OllamaURL  string // default http://localhost:11434
 	EmbedModel string // default bge-m3
 	Collection string // default viktor_tasks
-	GitRepo    string // optional per-instance repo path for commit enrichment
+	// QdrantAPIKey enables the `api-key` header for secured Qdrant
+	// instances; empty = no header.
+	QdrantAPIKey string
+	GitRepo      string // optional per-instance repo path for commit enrichment
 }
 
 func (c *Config) normalize() {

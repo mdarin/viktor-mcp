@@ -33,6 +33,9 @@ type MemorySection struct {
 	OllamaURL  string
 	EmbedModel string
 	Collection string
+	// QdrantAPIKey enables the `api-key` header for secured Qdrant
+	// instances (Helm chart service_api_key). Empty = no header.
+	QdrantAPIKey string
 	// GitEnrich maps instance name → path to the git repo whose commit
 	// history enriches that instance's task memory. Per-instance by
 	// design: multi-instance setups track different repos.
@@ -70,6 +73,14 @@ func (m *MemorySection) Coll() string {
 	return m.Collection
 }
 
+// QdrantKey returns the Qdrant API key of the memory section.
+func (m *MemorySection) QdrantKey() string {
+	if m == nil {
+		return ""
+	}
+	return m.QdrantAPIKey
+}
+
 func (m *MemorySection) RepoFor(instance string) string {
 	if m == nil {
 		return ""
@@ -95,6 +106,7 @@ type fileMemoryIn struct {
 	OllamaURL  string            `json:"ollama_url"`
 	EmbedModel string            `json:"embed_model"`
 	Collection string            `json:"collection"`
+	QdrantAPIKey string          `json:"qdrant_api_key"`
 	GitEnrich  map[string]string `json:"git_enrich"`
 }
 
@@ -207,11 +219,12 @@ func (c *Config) applyFile(fc *fileConfig) error {
 	}
 	if fc.Memory != nil {
 		c.Memory = &MemorySection{
-			QdrantURL:  fc.Memory.QdrantURL,
-			OllamaURL:  fc.Memory.OllamaURL,
-			EmbedModel: fc.Memory.EmbedModel,
-			Collection: fc.Memory.Collection,
-			GitEnrich:  fc.Memory.GitEnrich,
+			QdrantURL:    fc.Memory.QdrantURL,
+			OllamaURL:    fc.Memory.OllamaURL,
+			EmbedModel:   fc.Memory.EmbedModel,
+			Collection:   fc.Memory.Collection,
+			QdrantAPIKey: fc.Memory.QdrantAPIKey,
+			GitEnrich:    fc.Memory.GitEnrich,
 		}
 	}
 	return nil

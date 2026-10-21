@@ -78,7 +78,7 @@ func handleMemorySearch(r *Registry) mcp.ToolHandlerFor[MemorySearchIn, any] {
 		if !ok {
 			return nil, notConfigured(in.Instance), nil
 		}
-		searcher, err := memory.NewSearcher(cfg.WithDefaults(), memory.NewOllama(cfg.OllamaURL), memory.NewQdrant(cfg.QdrantURL))
+		searcher, err := memory.NewSearcher(cfg.WithDefaults(), memory.NewOllama(cfg.OllamaURL), memory.NewQdrant(cfg.QdrantURL, cfg.QdrantAPIKey))
 		if err != nil {
 			return nil, nil, err
 		}
@@ -111,7 +111,7 @@ func handleMemoryStatus(r *Registry) mcp.ToolHandlerFor[MemoryStatusIn, any] {
 		if instance == "" {
 			instance = "default"
 		}
-		ix, err := memory.NewIndexer(cfg, nopSource{}, memory.NewOllama(cfg.OllamaURL), memory.NewQdrant(cfg.QdrantURL), nil, memory.DefaultStatePath(instance))
+		ix, err := memory.NewIndexer(cfg, nopSource{}, memory.NewOllama(cfg.OllamaURL), memory.NewQdrant(cfg.QdrantURL, cfg.QdrantAPIKey), nil, memory.DefaultStatePath(instance))
 		if err != nil {
 			return nil, nil, err
 		}

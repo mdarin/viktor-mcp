@@ -511,7 +511,7 @@ func TestQdrantClientRoundTrip(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	q := NewQdrant(srv.URL)
+	q := NewQdrant(srv.URL, "")
 	ctx := context.Background()
 	if ok, _ := q.CollectionExists(ctx, "viktor_tasks"); !ok {
 		t.Fatal("collection must exist")

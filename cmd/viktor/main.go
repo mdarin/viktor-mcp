@@ -118,12 +118,13 @@ func runMemory(ctx context.Context, args []string) error {
 		return cfgVal
 	}
 	memCfg := memory.Config{
-		Instance:   instName,
-		QdrantURL:  pick("qdrant", "VIKTOR_MEMORY_QDRANT_URL", memSection.Qdrant()),
-		OllamaURL:  pick("ollama", "VIKTOR_MEMORY_OLLAMA_URL", memSection.Ollama()),
-		EmbedModel: pick("model", "VIKTOR_MEMORY_EMBED_MODEL", memSection.Model()),
-		Collection: pick("collection", "VIKTOR_MEMORY_COLLECTION", memSection.Coll()),
-		GitRepo:    pick("repo", "VIKTOR_MEMORY_GIT_REPO", memSection.RepoFor(instName)),
+		Instance:     instName,
+		QdrantURL:    pick("qdrant", "VIKTOR_MEMORY_QDRANT_URL", memSection.Qdrant()),
+		OllamaURL:    pick("ollama", "VIKTOR_MEMORY_OLLAMA_URL", memSection.Ollama()),
+		EmbedModel:   pick("model", "VIKTOR_MEMORY_EMBED_MODEL", memSection.Model()),
+		Collection:   pick("collection", "VIKTOR_MEMORY_COLLECTION", memSection.Coll()),
+		QdrantAPIKey: pick("apikey", "VIKTOR_MEMORY_QDRANT_API_KEY", memSection.QdrantKey()),
+		GitRepo:      pick("repo", "VIKTOR_MEMORY_GIT_REPO", memSection.RepoFor(instName)),
 	}
 	if memCfg.GitRepo == "" {
 		// "Index the current repository": repo history joins the board
@@ -146,7 +147,7 @@ func runMemory(ctx context.Context, args []string) error {
 		return fmt.Errorf("shadow store: %w", err)
 	}
 
-	ix, err := memory.NewIndexer(memCfg, memory.NewSource(api, store), memory.NewOllama(memCfg.OllamaURL), memory.NewQdrant(memCfg.QdrantURL), gitEnricher(memCfg), memory.DefaultStatePath(instName))
+	ix, err := memory.NewIndexer(memCfg, memory.NewSource(api, store), memory.NewOllama(memCfg.OllamaURL), memory.NewQdrant(memCfg.QdrantURL, memCfg.QdrantAPIKey), gitEnricher(memCfg), memory.DefaultStatePath(instName))
 	if err != nil {
 		return err
 	}

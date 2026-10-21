@@ -90,12 +90,13 @@ func memoryPerInstance(cfg *config.Config) map[string]memory.Config {
 	out := make(map[string]memory.Config, len(cfg.Instances))
 	for name := range cfg.Instances {
 		out[name] = memory.Config{
-			Instance:   name,
-			QdrantURL:  cfg.Memory.QdrantURL,
-			OllamaURL:  cfg.Memory.OllamaURL,
-			EmbedModel: cfg.Memory.EmbedModel,
-			Collection: cfg.Memory.Collection,
-			GitRepo:    cfg.Memory.GitEnrich[name],
+			Instance:     name,
+			QdrantURL:    cfg.Memory.QdrantURL,
+			OllamaURL:    cfg.Memory.OllamaURL,
+			EmbedModel:   cfg.Memory.EmbedModel,
+			Collection:   cfg.Memory.Collection,
+			QdrantAPIKey: cfg.Memory.QdrantAPIKey,
+			GitRepo:      cfg.Memory.GitEnrich[name],
 		}.WithDefaults()
 	}
 	return out
