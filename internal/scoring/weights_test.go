@@ -9,6 +9,9 @@ func TestDefaultWeightsComplete(t *testing.T) {
 			t.Error("default weight must be positive")
 		}
 	}
+	if w.Stalled >= 0 {
+		t.Error("stalled weight must be negative (penalty)")
+	}
 }
 
 func TestMergeOverrides(t *testing.T) {

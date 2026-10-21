@@ -11,11 +11,17 @@ import (
 	"strings"
 	"syscall"
 
+	"log"
+	"time"
+
 	"viktor/internal/client"
 	"viktor/internal/config"
+	"viktor/internal/fsmstate"
 	"viktor/internal/memory"
 	"viktor/internal/server"
 	"viktor/internal/shadow"
+	"viktor/internal/tools"
+	"viktor/internal/watchdog"
 )
 
 func main() {
@@ -27,6 +33,12 @@ func main() {
 		case "memory":
 			if err := runMemory(ctx, os.Args[2:]); err != nil {
 				fmt.Fprintln(os.Stderr, "viktor memory:", err)
+				os.Exit(1)
+			}
+			return
+		case "watchdog":
+			if err := runWatchdog(ctx, os.Args[2:]); err != nil {
+				fmt.Fprintln(os.Stderr, "viktor watchdog:", err)
 				os.Exit(1)
 			}
 			return
@@ -170,6 +182,58 @@ func runMemory(ctx context.Context, args []string) error {
 		return err
 	}
 	return printJSON(rep)
+}
+
+// runWatchdog implements `viktor watchdog` — the CLI entry point of the
+// stalled-task sentinel (card #58). With -once it runs a single scan pass
+// and prints the result; otherwise it loops on a ticker until interrupted.
+func runWatchdog(ctx context.Context, args []string) error {
+	loadDotenv(".env")
+	fs := flag.NewFlagSet("watchdog", flag.ContinueOnError)
+	once := fs.Bool("once", false, "run one scan pass and exit")
+	threshold := fs.Duration("threshold", watchdog.DefaultThreshold, "idle time after which an in_progress task stalls")
+	interval := fs.Duration("interval", 15*time.Minute, "scan interval in loop mode")
+	instance := fs.String("instance", "", "tracker instance name (default: config default)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	instName := *instance
+	if instName == "" {
+		instName = cfg.DefaultInstance
+	}
+	inst, ok := cfg.Instances[instName]
+	if !ok {
+		return fmt.Errorf("instance %q is not configured", instName)
+	}
+
+	api := client.NewWithAPI(inst.URL, inst.Token, inst.Timeout, inst.API).SetRateLimit(inst.RateLimit)
+	store, err := fsmstate.Open(tools.DefaultFSMPath(instName))
+	if err != nil {
+		return fmt.Errorf("fsm store: %w", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	w := watchdog.New(store, instName, api)
+	w.Threshold = *threshold
+
+	logger := log.New(os.Stderr, "", log.LstdFlags)
+	if *once {
+		res, err := w.Scan(ctx)
+		if err != nil {
+			return err
+		}
+		return printJSON(res)
+	}
+	err = watchdog.Loop(ctx, w, *interval, logger)
+	if errors.Is(err, context.Canceled) {
+		return nil
+	}
+	return err
 }
 
 func gitEnricher(cfg memory.Config) memory.GitEnricher {

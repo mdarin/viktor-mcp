@@ -13,7 +13,7 @@ import (
 
 var updateSnapshot = flag.Bool("update-snapshot", false, "rewrite testdata/golden.json")
 
-const expectedToolCount = 100
+const expectedToolCount = 102
 
 func newTestServer(t *testing.T) *mcp.Server {
 	t.Helper()

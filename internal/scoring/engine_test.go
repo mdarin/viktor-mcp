@@ -76,6 +76,24 @@ func TestWaitingUncapped(t *testing.T) {
 	}
 }
 
+func TestStalledPenalty(t *testing.T) {
+	e := NewEngine(fixedNow(), moscow)
+	base := e.Score(Task{ID: 1, Priority: 4})
+	got := e.Score(Task{ID: 1, Priority: 4, Stalled: true})
+	if got.Score != base.Score+e.Weights.Stalled {
+		t.Errorf("score = %v, want %v (base + stalled penalty %v)", got.Score, base.Score+e.Weights.Stalled, e.Weights.Stalled)
+	}
+	found := false
+	for _, term := range got.Why {
+		if term.Name == "stalled" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("stalled term missing from why trace: %v", got.Why)
+	}
+}
+
 func TestDoorCloses(t *testing.T) {
 	e := NewEngine(fixedNow(), moscow)
 	cases := []struct {

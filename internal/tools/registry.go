@@ -238,4 +238,5 @@ func (r *Registry) RegisterAll() {
 	registerTeams(r)
 	registerMemory(r)
 	registerFsm(r)
+	registerWatchdog(r)
 }

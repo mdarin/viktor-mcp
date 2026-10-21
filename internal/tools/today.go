@@ -12,6 +12,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"viktor/internal/fsmstate"
 	"viktor/internal/scoring"
 
 	"viktor/internal/client"
@@ -71,6 +72,25 @@ func str(m map[string]any, key string) string {
 	return s
 }
 
+// stalledTaskIDs returns the set of task IDs currently FSM-stalled on an
+// instance. The FSM store is advisory for today_*: any failure (no store
+// yet, lock contention) degrades to an empty set, never blocks ranking.
+func (r *Registry) stalledTaskIDs(ctx context.Context, instance string) map[int]struct{} {
+	out := map[int]struct{}{}
+	s, inst, err := r.fsmFor(instance)
+	if err != nil {
+		return out
+	}
+	claims, err := s.ListByState(ctx, inst, fsmstate.StateStalled)
+	if err != nil {
+		return out
+	}
+	for _, c := range claims {
+		out[c.TaskID] = struct{}{}
+	}
+	return out
+}
+
 func fetchOpenTasks(ctx context.Context, r *Registry) ([]map[string]any, error) {
 	var tasks []map[string]any
 	if err := r.api().ListTasks(ctx, client.ListParams{Filter: "done = false"}, &tasks); err != nil {
@@ -100,9 +120,14 @@ func handleTodayActions(r *Registry) mcp.ToolHandlerFor[TodayActionsIn, any] {
 		if err != nil {
 			return nil, nil, err
 		}
+		stalled := r.stalledTaskIDs(ctx, "")
 		st := make([]scoring.Task, 0, len(tasks))
 		for _, t := range tasks {
-			st = append(st, toScoringTask(t))
+			s := toScoringTask(t)
+			if _, ok := stalled[s.ID]; ok {
+				s.Stalled = true
+			}
+			st = append(st, s)
 		}
 		engine := scoring.NewEngine(time.Now(), time.Local)
 		ranked := engine.Rank(st)
@@ -123,6 +148,7 @@ func handleTodayActions(r *Registry) mcp.ToolHandlerFor[TodayActionsIn, any] {
 					"score":   s.Score,
 					"why":     scoring.WhyTrace(s),
 					"terms":   termsOut(s),
+					"stalled": s.Task.Stalled,
 				})
 				total++
 			}

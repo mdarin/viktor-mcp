@@ -2220,5 +2220,45 @@
       "type": "object"
     },
     "name": "view_update"
+  },
+  {
+    "description": "Return a stalled task to in_progress with an audit trail (who/when)",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "actor": {
+          "description": "who returns the task to in_progress (audit trail)",
+          "type": "string"
+        },
+        "instance": {
+          "type": "string"
+        },
+        "task_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "task_id"
+      ],
+      "type": "object"
+    },
+    "name": "watchdog_resume"
+  },
+  {
+    "description": "Stall FSM-tracked in_progress tasks that have seen no tracker activity beyond the threshold",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "instance": {
+          "type": "string"
+        },
+        "threshold_hours": {
+          "description": "idle threshold in hours before a task counts as stalled (default 24)",
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "name": "watchdog_scan"
   }
 ]

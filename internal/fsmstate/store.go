@@ -73,6 +73,28 @@ CREATE TABLE IF NOT EXISTS transitions (
 	return nil
 }
 
+// ListByState returns all claims of an instance in the given state,
+// ordered by claim time (oldest first) — the watchdog scan input.
+func (s *Store) ListByState(ctx context.Context, instance string, state State) ([]Claim, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT task_id, state, request_id, actor, claimed_at, updated_at FROM claims
+		 WHERE instance = ? AND state = ? ORDER BY claimed_at`,
+		instance, string(state))
+	if err != nil {
+		return nil, fmt.Errorf("fsmstate: list claims: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Claim
+	for rows.Next() {
+		var c Claim
+		if err := rows.Scan(&c.TaskID, &c.State, &c.RequestID, &c.Actor, &c.ClaimedAt, &c.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("fsmstate: scan claim: %w", err)
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
 // Claim is the current claim of a task.
 type Claim struct {
 	TaskID    int    `json:"task_id"`

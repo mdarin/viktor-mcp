@@ -13,6 +13,7 @@ type Task struct {
 	EffortMinutes int
 	DeferredCount int
 	DeferredDread int
+	Stalled       bool
 }
 
 type Caps struct {
@@ -97,6 +98,12 @@ func (e Engine) Score(t Task) Scored {
 	if t.DeferredCount > 0 {
 		units := minInt(t.DeferredCount, e.Caps.DeferredCount)
 		terms = append(terms, Term{"deferred", float64(units) * w.Deferred})
+	}
+
+	if t.Stalled {
+		// Watchdog-flagged stall: push the task down but keep it visible
+		// in the why trace (card #58).
+		terms = append(terms, Term{"stalled", w.Stalled})
 	}
 
 	if t.WaitingSince != nil && !t.WaitingSince.IsZero() {

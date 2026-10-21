@@ -284,6 +284,8 @@ go test ./internal/tools -update-snapshot
 | `view_list` | List all views for a project |
 | `view_set_position` | Set a task position within a list, gantt, or table view |
 | `view_update` | Update a view title or filter |
+| `watchdog_resume` | Return a stalled task to in_progress with an audit trail (who/when) |
+| `watchdog_scan` | Stall FSM-tracked in_progress tasks that have seen no tracker activity beyond the threshold |
 <!-- tools:end -->
 
 ## Offline mode (shadow)

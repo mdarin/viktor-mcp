@@ -10,6 +10,7 @@ type Weights struct {
 	Effort     float64 `json:"effort,omitempty"`
 	Stale      float64 `json:"stale,omitempty"`
 	QuickWin   float64 `json:"quick_win,omitempty"`
+	Stalled    float64 `json:"stalled,omitempty"`
 }
 
 func DefaultWeights() Weights {
@@ -23,6 +24,7 @@ func DefaultWeights() Weights {
 		Effort:     2,
 		Stale:      2,
 		QuickWin:   3,
+		Stalled:    -6,
 	}
 }
 
@@ -54,6 +56,9 @@ func (w Weights) Merge(overrides Weights) Weights {
 	}
 	if overrides.QuickWin != 0 {
 		out.QuickWin = overrides.QuickWin
+	}
+	if overrides.Stalled != 0 {
+		out.Stalled = overrides.Stalled
 	}
 	return out
 }
