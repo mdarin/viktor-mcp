@@ -68,22 +68,22 @@ func (f *fakeKanban) handler(w http.ResponseWriter, r *http.Request) {
 		return m
 	}
 	switch {
-	case r.Method == http.MethodPut && r.URL.Path == "/api/v1/projects":
+	case r.Method == http.MethodPut && r.URL.Path == "/api/v2/projects":
 		in := body()
 		title, _ := in["title"].(string)
 		f.nextProjectID++
 		f.projects[title] = f.nextProjectID
 		json.NewEncoder(w).Encode(map[string]any{"id": float64(f.nextProjectID), "title": title})
-	case r.Method == http.MethodGet && r.URL.Path == "/api/v1/projects/9/views":
+	case r.Method == http.MethodGet && r.URL.Path == "/api/v2/projects/9/views":
 		json.NewEncoder(w).Encode(f.views)
-	case r.Method == http.MethodPut && r.URL.Path == "/api/v1/projects/9/views":
+	case r.Method == http.MethodPut && r.URL.Path == "/api/v2/projects/9/views":
 		in := body()
 		f.nextViewID++
 		in["id"] = float64(f.nextViewID)
 		f.views = append(f.views, in)
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(in)
-	case r.Method == http.MethodPost && r.URL.Path == "/api/v1/projects/9/views/40":
+	case r.Method == http.MethodPost && r.URL.Path == "/api/v2/projects/9/views/40":
 		in := body()
 		for _, v := range f.views {
 			if asInt(v["id"]) == 40 {
@@ -94,16 +94,16 @@ func (f *fakeKanban) handler(w http.ResponseWriter, r *http.Request) {
 		}
 		json.NewEncoder(w).Encode(in)
 	case r.Method == http.MethodGet && len(r.URL.Path) > 20 &&
-		r.URL.Path == "/api/v1/projects/9/views/40/buckets":
+		r.URL.Path == "/api/v2/projects/9/views/40/buckets":
 		json.NewEncoder(w).Encode(f.buckets[40])
-	case r.Method == http.MethodPut && r.URL.Path == "/api/v1/projects/9/views/40/buckets":
+	case r.Method == http.MethodPut && r.URL.Path == "/api/v2/projects/9/views/40/buckets":
 		in := body()
 		f.nextBucketID++
 		in["id"] = float64(f.nextBucketID)
 		f.buckets[40] = append(f.buckets[40], in)
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(in)
-	case r.Method == http.MethodDelete && r.URL.Path == "/api/v1/projects/9/views/40/buckets/1":
+	case r.Method == http.MethodDelete && r.URL.Path == "/api/v2/projects/9/views/40/buckets/1":
 		kept := f.buckets[40][:0]
 		for _, b := range f.buckets[40] {
 			if asInt(b["id"]) != 1 {

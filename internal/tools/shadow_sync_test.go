@@ -25,12 +25,12 @@ func newSyncSession(t *testing.T) (*mcp.ClientSession, *Registry, *shadow.Store)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		page := r.URL.Query().Get("page")
 		switch {
-		case r.URL.Path == "/api/v1/info":
+		case r.URL.Path == "/api/v2/info":
 			writeTestJSON(w, map[string]any{"version": "test"})
-		case r.Method == "PUT" && strings.HasPrefix(r.URL.Path, "/api/v1/projects/") && strings.HasSuffix(r.URL.Path, "/tasks"):
+		case r.Method == "PUT" && strings.HasPrefix(r.URL.Path, "/api/v2/projects/") && strings.HasSuffix(r.URL.Path, "/tasks"):
 			id := 100 + created.Add(1)
 			writeTestJSON(w, map[string]any{"id": id, "title": "from shadow"})
-		case r.Method == "POST" && strings.HasPrefix(r.URL.Path, "/api/v1/tasks/"):
+		case r.Method == "POST" && strings.HasPrefix(r.URL.Path, "/api/v2/tasks/"):
 			var body map[string]any
 			_ = json.NewDecoder(r.Body).Decode(&body)
 			body["id"] = float64(42)

@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	Version           = "0.7.0"
+	Version           = "0.8.0"
 	defaultUserAgent  = "viktor/" + Version
 	defaultTimeout    = 30 * time.Second
 	defaultMaxRetries = 2
@@ -32,6 +32,9 @@ type Client struct {
 	maxRetries int
 	backoff    time.Duration
 	limiter    *rate.Limiter
+	// api is the URL prefix version: "v2" (default, upstream target —
+	// v1 is frozen) or "v1" (config rollback flag, card #59).
+	api string
 }
 
 type APIError struct {
@@ -52,18 +55,32 @@ func (e *APIError) Error() string {
 	return fmt.Sprintf("vikunja api error %d: %s", e.StatusCode, msg)
 }
 
+// New builds a client against the instance base URL. The default API
+// prefix is /api/v2 (Vikunja ≥ 2.4 dual-serves CRUD routes under both
+// prefixes); use NewWithAPI("v1") for legacy instances.
 func New(baseURL, token string, timeout time.Duration) *Client {
+	return NewWithAPI(baseURL, token, timeout, "v2")
+}
+
+func NewWithAPI(baseURL, token string, timeout time.Duration, apiVersion string) *Client {
 	if timeout <= 0 {
 		timeout = defaultTimeout
 	}
+	if apiVersion != "v1" {
+		apiVersion = "v2"
+	}
 	return &Client{
-		baseURL:    strings.TrimRight(baseURL, "/") + "/api/v1",
+		baseURL:    strings.TrimRight(baseURL, "/") + "/api/" + apiVersion,
 		token:      token,
 		maxRetries: defaultMaxRetries,
 		backoff:    defaultBackoff,
 		http:       &http.Client{Timeout: timeout},
+		api:        apiVersion,
 	}
 }
+
+// APIVersion returns the URL prefix version this client talks to.
+func (c *Client) APIVersion() string { return c.api }
 
 func (c *Client) SetRateLimit(rps float64) *Client {
 	if rps <= 0 {

@@ -33,9 +33,9 @@ func (f *fakeVikunja) handler(w http.ResponseWriter, r *http.Request) {
 	f.count(r.Method, r.URL.Path)
 	body, _ := io.ReadAll(r.Body)
 	switch {
-	case r.Method == http.MethodGet && r.URL.Path == "/api/v1/tasks/42":
+	case r.Method == http.MethodGet && r.URL.Path == "/api/v2/tasks/42":
 		json.NewEncoder(w).Encode(f.task)
-	case r.Method == http.MethodPost && r.URL.Path == "/api/v1/tasks/42":
+	case r.Method == http.MethodPost && r.URL.Path == "/api/v2/tasks/42":
 		var patch map[string]any
 		json.Unmarshal(body, &patch)
 		for k, v := range patch {
@@ -45,25 +45,25 @@ func (f *fakeVikunja) handler(w http.ResponseWriter, r *http.Request) {
 			f.task["bucket_id"] = float64(0)
 		}
 		json.NewEncoder(w).Encode(f.task)
-	case r.Method == http.MethodGet && r.URL.Path == "/api/v1/projects/8/views":
+	case r.Method == http.MethodGet && r.URL.Path == "/api/v2/projects/8/views":
 		json.NewEncoder(w).Encode([]map[string]any{f.view})
-	case r.Method == http.MethodGet && r.URL.Path == "/api/v1/projects/8/views/32/buckets":
+	case r.Method == http.MethodGet && r.URL.Path == "/api/v2/projects/8/views/32/buckets":
 		json.NewEncoder(w).Encode(f.buckets)
-	case r.Method == http.MethodPut && r.URL.Path == "/api/v1/projects/8/views/32/buckets":
+	case r.Method == http.MethodPut && r.URL.Path == "/api/v2/projects/8/views/32/buckets":
 		var nb map[string]any
 		json.Unmarshal(body, &nb)
 		f.nextBucketID++
 		nb["id"] = float64(f.nextBucketID)
 		f.buckets = append(f.buckets, nb)
 		json.NewEncoder(w).Encode(nb)
-	case r.Method == http.MethodPost && r.URL.Path == "/api/v1/projects/8/views/32":
+	case r.Method == http.MethodPost && r.URL.Path == "/api/v2/projects/8/views/32":
 		var patch map[string]any
 		json.Unmarshal(body, &patch)
 		for k, v := range patch {
 			f.view[k] = v
 		}
 		json.NewEncoder(w).Encode(f.view)
-	case r.Method == http.MethodGet && r.URL.Path == "/api/v1/projects/8/views/32/tasks":
+	case r.Method == http.MethodGet && r.URL.Path == "/api/v2/projects/8/views/32/tasks":
 		buckets := make([]map[string]any, 0, len(f.buckets))
 		for _, b := range f.buckets {
 			buckets = append(buckets, map[string]any{
@@ -78,7 +78,7 @@ func (f *fakeVikunja) handler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		json.NewEncoder(w).Encode(buckets)
-	case r.Method == http.MethodPost && r.URL.Path == "/api/v1/tasks/42/position":
+	case r.Method == http.MethodPost && r.URL.Path == "/api/v2/tasks/42/position":
 		var pos map[string]any
 		json.Unmarshal(body, &pos)
 		f.positionsBody = pos
@@ -169,9 +169,9 @@ func TestCompleteHappyPath(t *testing.T) {
 		t.Error("fallback must not fire on happy path")
 	}
 	for _, ep := range []string{
-		"POST /api/v1/projects/8/views/32",
-		"PUT /api/v1/projects/8/views/32/buckets",
-		"POST /api/v1/tasks/42/position",
+		"POST /api/v2/projects/8/views/32",
+		"PUT /api/v2/projects/8/views/32/buckets",
+		"POST /api/v2/tasks/42/position",
 	} {
 		if f.calls[ep] != 0 {
 			t.Errorf("%s must not be called on happy path", ep)
@@ -187,10 +187,10 @@ func TestCompleteAutoConfiguresDoneBucket(t *testing.T) {
 	f.view["done_bucket_id"] = float64(0)
 	out := callComplete(t, session)
 
-	if f.calls["POST /api/v1/projects/8/views/32"] != 1 {
+	if f.calls["POST /api/v2/projects/8/views/32"] != 1 {
 		t.Errorf("view must be configured once, calls=%v", f.calls)
 	}
-	if f.calls["PUT /api/v1/projects/8/views/32/buckets"] != 0 {
+	if f.calls["PUT /api/v2/projects/8/views/32/buckets"] != 0 {
 		t.Error("existing done bucket must be reused, not recreated")
 	}
 	if out["bucket_id"] != float64(43) {
@@ -208,7 +208,7 @@ func TestCompleteCreatesMissingDoneBucket(t *testing.T) {
 
 	out := callComplete(t, session)
 
-	if f.calls["PUT /api/v1/projects/8/views/32/buckets"] != 1 {
+	if f.calls["PUT /api/v2/projects/8/views/32/buckets"] != 1 {
 		t.Errorf("done bucket must be created once, calls=%v", f.calls)
 	}
 	if out["bucket_id"] != float64(51) {
@@ -223,7 +223,7 @@ func TestCompleteFallsBackToPosition(t *testing.T) {
 	f, session := newCompleteFixture(t, true)
 	out := callComplete(t, session)
 
-	if f.calls["POST /api/v1/tasks/42/position"] != 1 {
+	if f.calls["POST /api/v2/tasks/42/position"] != 1 {
 		t.Errorf("fallback position must fire once, calls=%v", f.calls)
 	}
 	if out["fallback_used"] != true {
@@ -252,7 +252,7 @@ func TestCompleteNoKanbanView(t *testing.T) {
 	if f.task["done"] != true {
 		t.Error("task must still be marked done without kanban view")
 	}
-	if f.calls["POST /api/v1/tasks/42/position"] != 0 {
+	if f.calls["POST /api/v2/tasks/42/position"] != 0 {
 		t.Error("no bucket ops without kanban view")
 	}
 }

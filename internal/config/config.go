@@ -20,6 +20,9 @@ type Instance struct {
 	Token     string
 	Timeout   time.Duration
 	RateLimit float64
+	// API is the URL prefix version: "v2" (default) or "v1" rollback
+	// for legacy instances (card #59).
+	API string
 }
 
 // MemorySection is the semantic memory layer configuration (ADR 0003).
@@ -100,6 +103,7 @@ type fileInstanceIn struct {
 	Token     string  `json:"token"`
 	Timeout   string  `json:"timeout"`
 	RateLimit float64 `json:"rate_limit"`
+	API       string  `json:"api_version"`
 }
 
 func DefaultPath() string {
@@ -188,7 +192,7 @@ func (c *Config) applyFile(fc *fileConfig) error {
 	sort.Strings(names)
 	for _, name := range names {
 		fi := fc.Instances[name]
-		inst := &Instance{URL: strings.TrimRight(fi.URL, "/"), Token: fi.Token, RateLimit: fi.RateLimit}
+		inst := &Instance{URL: strings.TrimRight(fi.URL, "/"), Token: fi.Token, RateLimit: fi.RateLimit, API: fi.API}
 		if fi.Timeout != "" {
 			d, err := time.ParseDuration(fi.Timeout)
 			if err != nil {
@@ -271,13 +275,16 @@ func (c *Config) applyEnv(env map[string]string) error {
 			}
 			inst.RateLimit = f
 		}
+		if v, ok := get(name, "API"); ok && v != "" {
+			inst.API = strings.TrimSpace(v)
+		}
 	}
 	return nil
 }
 
 func isValidEnvKey(key string) bool {
 	switch key {
-	case "URL", "TOKEN", "TIMEOUT", "RATE_LIMIT":
+	case "URL", "TOKEN", "TIMEOUT", "RATE_LIMIT", "API":
 		return true
 	}
 	return false
@@ -320,6 +327,11 @@ func (c *Config) validate() error {
 		inst := c.Instances[name]
 		if inst.URL == "" || inst.Token == "" {
 			return fmt.Errorf("instance %q: URL and TOKEN are required", name)
+		}
+		switch inst.API {
+		case "", "v1", "v2":
+		default:
+			return fmt.Errorf("instance %q: api_version must be \"v1\" or \"v2\", got %q", name, inst.API)
 		}
 	}
 	return nil

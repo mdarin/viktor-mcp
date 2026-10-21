@@ -116,9 +116,9 @@ func TestTaskUpdateE2E(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/tasks/42":
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v2/tasks/42":
 			json.NewEncoder(w).Encode(currentTaskBody())
-		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/tasks/42":
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v2/tasks/42":
 			body, _ := io.ReadAll(r.Body)
 			posted.Store(string(body))
 			json.NewEncoder(w).Encode(currentTaskBody())

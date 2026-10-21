@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -249,5 +250,55 @@ func TestRateLimitDisabled(t *testing.T) {
 	}
 	if time.Since(start) > 100*time.Millisecond {
 		t.Error("unlimited client should not wait")
+	}
+}
+
+func TestV2PrefixAndEnvelope(t *testing.T) {
+	var gotQuery, gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotQuery = r.URL.RawQuery
+		json.NewEncoder(w).Encode(map[string]any{
+			"items": []map[string]int{{"id": 1}}, "total": 1,
+		})
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, "t", 0)
+	var out []struct {
+		ID int `json:"id"`
+	}
+	if err := c.List(context.Background(), "/tasks", ListOptions{PerPage: 7}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != "/api/v2/tasks" || !strings.Contains(gotQuery, "per_page=7") {
+		t.Errorf("path = %s, query = %s, want /api/v2/tasks with per_page=7", gotPath, gotQuery)
+	}
+	if len(out) != 1 || out[0].ID != 1 {
+		t.Errorf("envelope items not decoded: %+v", out)
+	}
+}
+
+func TestV1RollbackFlag(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/tasks" {
+			t.Errorf("path = %s, want /api/v1/tasks", r.URL.Path)
+		}
+		if r.URL.Query().Get("page_size") != "3" {
+			t.Errorf("query = %s, want page_size=3", r.URL.RawQuery)
+		}
+		json.NewEncoder(w).Encode([]map[string]int{{"id": 1}})
+	}))
+	defer srv.Close()
+
+	c := NewWithAPI(srv.URL, "t", 0, "v1")
+	var out []struct {
+		ID int `json:"id"`
+	}
+	if err := c.List(context.Background(), "/tasks", ListOptions{PerPage: 3, Page: 1}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if c.APIVersion() != "v1" {
+		t.Errorf("api version = %s, want v1", c.APIVersion())
 	}
 }

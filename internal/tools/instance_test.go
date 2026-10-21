@@ -17,9 +17,9 @@ func newMultiFixture(t *testing.T) (*mcp.ClientSession, *httptest.Server, *httpt
 	srvA := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
-		case r.URL.Path == "/api/v1/info":
+		case r.URL.Path == "/api/v2/info":
 			fmt.Fprint(w, `{"version":"1.0.0"}`)
-		case r.URL.Path == "/api/v1/tasks/1":
+		case r.URL.Path == "/api/v2/tasks/1":
 			fmt.Fprint(w, `{"id":1,"title":"from-a"}`)
 		default:
 			fmt.Fprint(w, `[]`)
@@ -28,9 +28,9 @@ func newMultiFixture(t *testing.T) (*mcp.ClientSession, *httptest.Server, *httpt
 	srvB := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
-		case r.URL.Path == "/api/v1/info":
+		case r.URL.Path == "/api/v2/info":
 			fmt.Fprint(w, `{"version":"2.0.0"}`)
-		case r.URL.Path == "/api/v1/tasks/1":
+		case r.URL.Path == "/api/v2/tasks/1":
 			fmt.Fprint(w, `{"id":1,"title":"from-b"}`)
 		default:
 			fmt.Fprint(w, `[]`)

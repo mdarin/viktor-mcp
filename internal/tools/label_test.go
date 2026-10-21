@@ -37,7 +37,7 @@ func (f *fakeLabels) task(id int) map[string]any {
 func (f *fakeLabels) handler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	switch {
-	case r.Method == http.MethodGet && r.URL.Path == "/api/v1/labels":
+	case r.Method == http.MethodGet && r.URL.Path == "/api/v2/labels":
 		out := []map[string]any{}
 		for _, l := range f.labels {
 			if !f.deleted[int(l["id"].(float64))] {
@@ -45,7 +45,7 @@ func (f *fakeLabels) handler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		json.NewEncoder(w).Encode(out)
-	case r.Method == http.MethodPut && r.URL.Path == "/api/v1/labels":
+	case r.Method == http.MethodPut && r.URL.Path == "/api/v2/labels":
 		var b map[string]any
 		json.NewDecoder(r.Body).Decode(&b)
 		f.nextID++
@@ -55,14 +55,14 @@ func (f *fakeLabels) handler(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(created)
 	default:
 		var delID int
-		if _, err := fmt.Sscanf(r.URL.Path, "/api/v1/labels/%d", &delID); err == nil && r.Method == http.MethodDelete {
+		if _, err := fmt.Sscanf(r.URL.Path, "/api/v2/labels/%d", &delID); err == nil && r.Method == http.MethodDelete {
 			f.deleted[delID] = true
 			w.WriteHeader(http.StatusOK)
 			json.NewEncoder(w).Encode(map[string]any{"ok": true})
 			return
 		}
 		var taskID, labelID int
-		if _, err := fmt.Sscanf(r.URL.Path, "/api/v1/tasks/%d/labels", &taskID); err == nil {
+		if _, err := fmt.Sscanf(r.URL.Path, "/api/v2/tasks/%d/labels", &taskID); err == nil {
 			switch r.Method {
 			case http.MethodPut:
 				var b map[string]int
@@ -81,7 +81,7 @@ func (f *fakeLabels) handler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		var tid int
-		if _, err := fmt.Sscanf(r.URL.Path, "/api/v1/tasks/%d", &tid); err == nil && r.Method == http.MethodGet {
+		if _, err := fmt.Sscanf(r.URL.Path, "/api/v2/tasks/%d", &tid); err == nil && r.Method == http.MethodGet {
 			json.NewEncoder(w).Encode(f.task(tid))
 			return
 		}

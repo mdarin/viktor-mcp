@@ -18,7 +18,7 @@ func unreachableServer(t *testing.T) string {
 
 func TestDoMarksConnectionRefusedAsUnreachable(t *testing.T) {
 	c := New(unreachableServer(t), "tok", 0)
-	err := c.Do(context.Background(), request{method: http.MethodGet, path: "/api/v1/info"})
+	err := c.Do(context.Background(), request{method: http.MethodGet, path: "/api/v2/info"})
 	if !errors.Is(err, ErrUnreachable) {
 		t.Fatalf("want ErrUnreachable, got %v", err)
 	}
@@ -29,7 +29,7 @@ func TestDoDoesNotMarkAPIErrorAsUnreachable(t *testing.T) {
 		w.WriteHeader(http.StatusNotFound)
 		_, _ = w.Write([]byte(`{"code":404,"message":"nope"}`))
 	})
-	err := c.Do(context.Background(), request{method: http.MethodGet, path: "/api/v1/x"})
+	err := c.Do(context.Background(), request{method: http.MethodGet, path: "/api/v2/x"})
 	if errors.Is(err, ErrUnreachable) {
 		t.Fatal("API error must not be unreachable")
 	}

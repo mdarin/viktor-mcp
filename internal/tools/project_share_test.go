@@ -23,7 +23,7 @@ type fakeShare struct {
 func (f *fakeShare) handler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	switch {
-	case r.Method == http.MethodGet && r.URL.Path == "/api/v1/users":
+	case r.Method == http.MethodGet && r.URL.Path == "/api/v2/users":
 		q := r.URL.Query().Get("s")
 		f.searchQueries = append(f.searchQueries, q)
 		var out []map[string]any
@@ -37,7 +37,7 @@ func (f *fakeShare) handler(w http.ResponseWriter, r *http.Request) {
 			out = []map[string]any{}
 		}
 		json.NewEncoder(w).Encode(out)
-	case r.Method == http.MethodPut && r.URL.Path == "/api/v1/projects/9/users":
+	case r.Method == http.MethodPut && r.URL.Path == "/api/v2/projects/9/users":
 		var b map[string]any
 		json.NewDecoder(r.Body).Decode(&f.putBody)
 		f.shared = append(f.shared, map[string]any{
@@ -47,7 +47,7 @@ func (f *fakeShare) handler(w http.ResponseWriter, r *http.Request) {
 		})
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(b)
-	case r.Method == http.MethodGet && r.URL.Path == "/api/v1/projects/9/users":
+	case r.Method == http.MethodGet && r.URL.Path == "/api/v2/projects/9/users":
 		json.NewEncoder(w).Encode(f.shared)
 	default:
 		http.Error(w, "unexpected: "+r.Method+" "+r.URL.Path, http.StatusNotFound)

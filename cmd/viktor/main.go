@@ -140,7 +140,7 @@ func runMemory(ctx context.Context, args []string) error {
 		return fmt.Errorf("memory is not configured: add a \"memory\" section to %s (see .env.example) or set VIKTOR_MEMORY_* env / pass -qdrant/-ollama flags", config.DefaultPath())
 	}
 
-	api := client.New(inst.URL, inst.Token, inst.Timeout).SetRateLimit(inst.RateLimit)
+	api := client.NewWithAPI(inst.URL, inst.Token, inst.Timeout, inst.API).SetRateLimit(inst.RateLimit)
 	store, err := shadow.NewStore("", instName)
 	if err != nil {
 		return fmt.Errorf("shadow store: %w", err)

@@ -97,7 +97,7 @@ func TestBatchGetOrderAndConcurrency(t *testing.T) {
 func TestBatchGetPartialErrors(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		if r.URL.Path == "/api/v1/tasks/404" {
+		if r.URL.Path == "/api/v2/tasks/404" {
 			w.WriteHeader(http.StatusNotFound)
 			fmt.Fprint(w, `{"code":404,"message":"not found"}`)
 			return
