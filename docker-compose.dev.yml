@@ -1,0 +1,109 @@
+# Dev-стенд viktor (карточка #52): полный стек для «Очереди 2».
+# Порты подняты в верхние диапазоны, чтобы не конфликтовать с боевыми
+# инстансами на хосте (Vikunja 13456, Qdrant 6333, Ollama 11434).
+#
+#   make dev-up      — поднять стек
+#   make dev-down    — остановить (данные сохраняются в named volumes)
+#   make dev-reset   — остановить и снести данные
+#
+# Vikunja:  http://localhost:13457  (первый запуск создаёт админа через CLI:
+#   docker compose -f docker-compose.dev.yml exec vikunja /app/vikunja user create ...)
+# Qdrant:   http://localhost:16333 (UI: /dashboard)
+# ParadeDB: localhost:15433 (postgres/pg_search, BM25 search_history)
+# Ollama:   http://localhost:11435 (модель bge-m3 тянется отдельно:
+#   docker compose -f docker-compose.dev.yml exec ollama ollama pull bge-m3)
+
+name: viktor-dev
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: vikunja
+      POSTGRES_PASSWORD: vikunja
+      POSTGRES_DB: vikunja
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vikunja -d vikunja"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  vikunja:
+    image: vikunja/vikunja:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      VIKUNJA_DATABASE_TYPE: postgres
+      VIKUNJA_DATABASE_HOST: postgres
+      VIKUNJA_DATABASE_USER: vikunja
+      VIKUNJA_DATABASE_PASSWORD: vikunja
+      VIKUNJA_DATABASE_DATABASE: vikunja
+      VIKUNJA_SERVICE_JWTSECRET: dev-stand-secret-change-me
+      VIKUNJA_SERVICE_PUBLICURL: http://localhost:13457/
+      VIKUNJA_SERVICE_ENABLEREGISTRATION: "false"
+    ports:
+      - "13457:3456"
+    volumes:
+      - vikunja-files:/app/vikunja/files
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3456/api/v1/info >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  paradedb:
+    image: paradedb/paradedb:latest
+    environment:
+      POSTGRES_USER: viktor
+      POSTGRES_PASSWORD: viktor
+      POSTGRES_DB: viktor
+    ports:
+      - "15433:5432"
+    volumes:
+      - paradedb-data:/var/lib/postgresql/data
+      - ./deploy/paradedb-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U viktor -d viktor"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "16333:6333"
+      - "16334:6334"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:6333/readyz >/dev/null 2>&1 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11435:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  vikunja-files:
+  paradedb-data:
+  qdrant-data:
+  ollama-data:

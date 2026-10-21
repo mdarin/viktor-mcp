@@ -339,6 +339,41 @@ Observability: каждый вызов инструмента пишет JSON-л
 завершении — сводка `tool stats` по каждому инструменту. По логам видно, какой
 инструмент тормозит или падает, без отладчика.
 
+## Dev-стенд (docker compose)
+
+Полный стек «Очереди 2» поднимается одной командой (`docker-compose.dev.yml`,
+карточка #52): Vikunja на Postgres, ParadeDB (BM25 `search_history`),
+Qdrant и Ollama (bge-m3). Порты намеренно в верхних диапазонах, чтобы не
+конфликтовать с боевыми инстансами:
+
+| Сервис   | Адрес                        | Примечание                              |
+|----------|------------------------------|-----------------------------------------|
+| Vikunja  | http://localhost:13457       | Postgres backend, registration выключена |
+| Qdrant   | http://localhost:16333       | UI: `/dashboard`                        |
+| ParadeDB | localhost:15433              | postgres `viktor/viktor`, БД `viktor`   |
+| Ollama   | http://localhost:11435       | `bge-m3` тянется отдельно (см. ниже)    |
+
+```sh
+make dev-up          # поднять весь стек
+make dev-down        # остановить (данные в named volumes)
+make dev-logs        # хвост логов
+make dev-reset       # снести вместе с данными
+```
+
+Первый запуск:
+
+```sh
+# админ Vikunja:
+docker compose -f docker-compose.dev.yml exec vikunja \
+  /app/vikunja user create --user admin --password <pass> --email admin@local
+# модель эмбеддингов:
+docker compose -f docker-compose.dev.yml exec ollama ollama pull bge-m3
+```
+
+`search_history` и BM25-индекс создаются автоматически при первом старте
+ParadeDB (`deploy/paradedb-init/01_search_history.sql`). Для `memory sync`
+против стенда см. dev-блок в `.env.example`.
+
 ## Выбор SDK
 
 Официальный [modelcontextprotocol/go-sdk](https://github.com/modelcontextprotocol/go-sdk) (v1.8.0) — см. [ADR 0001](docs/adr/0001-sdk-choice.md).
