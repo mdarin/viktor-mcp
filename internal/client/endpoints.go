@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 )
 
@@ -55,11 +56,11 @@ func (c *Client) GetProject(ctx context.Context, projectID int, out any) error {
 }
 
 func (c *Client) CreateProject(ctx context.Context, body, out any) error {
-	return c.Put(ctx, "/projects", body, out)
+	return c.createVerb(ctx, "/projects", body, out)
 }
 
 func (c *Client) UpdateProject(ctx context.Context, projectID int, body, out any) error {
-	return c.Post(ctx, url("/projects/%d", projectID), body, out)
+	return c.updateVerb(ctx, url("/projects/%d", projectID), body, out)
 }
 
 func (c *Client) DeleteProject(ctx context.Context, projectID int) error {
@@ -67,7 +68,7 @@ func (c *Client) DeleteProject(ctx context.Context, projectID int) error {
 }
 
 func (c *Client) ShareProject(ctx context.Context, projectID int, body, out any) error {
-	return c.Put(ctx, url("/projects/%d/users", projectID), body, out)
+	return c.createVerb(ctx, url("/projects/%d/users", projectID), body, out)
 }
 
 func (c *Client) ProjectUsers(ctx context.Context, projectID int, out any) error {
@@ -75,7 +76,7 @@ func (c *Client) ProjectUsers(ctx context.Context, projectID int, out any) error
 }
 
 func (c *Client) ShareProjectTeam(ctx context.Context, projectID int, body, out any) error {
-	return c.Put(ctx, url("/projects/%d/teams", projectID), body, out)
+	return c.createVerb(ctx, url("/projects/%d/teams", projectID), body, out)
 }
 
 func (c *Client) ProjectTeams(ctx context.Context, projectID int, out any) error {
@@ -99,11 +100,11 @@ func (c *Client) GetTask(ctx context.Context, taskID int, out any) error {
 }
 
 func (c *Client) CreateTask(ctx context.Context, projectID int, body, out any) error {
-	return c.Put(ctx, url("/projects/%d/tasks", projectID), body, out)
+	return c.createVerb(ctx, url("/projects/%d/tasks", projectID), body, out)
 }
 
 func (c *Client) UpdateTask(ctx context.Context, taskID int, body, out any) error {
-	return c.Post(ctx, url("/tasks/%d", taskID), body, out)
+	return c.updateVerb(ctx, url("/tasks/%d", taskID), body, out)
 }
 
 func (c *Client) DeleteTask(ctx context.Context, taskID int) error {
@@ -120,7 +121,43 @@ func (c *Client) MoveTaskToProject(ctx context.Context, taskID, targetProjectID 
 }
 
 func (c *Client) SetTaskPosition(ctx context.Context, taskID int, body, out any) error {
-	return c.Post(ctx, url("/tasks/%d/position", taskID), body, out)
+	if c.api != "v1" {
+		if m, ok := body.(map[string]any); ok {
+			// v2: bucket assignment is a dedicated route; position is a
+			// per-view sort value without bucket_id in the body.
+			if bid, hasBucket := num(m["bucket_id"]); hasBucket && bid > 0 {
+				pid, _ := num(m["project_id"])
+				vid, _ := num(m["project_view_id"])
+				// v2 TaskBucket accepts task_id only; in-bucket ordering
+				// goes through the position route separately.
+				return c.Put(ctx, url("/projects/%d/views/%d/buckets/%d/tasks", int(pid), int(vid), int(bid)), map[string]any{"task_id": taskID}, out)
+			}
+			payload := map[string]any{}
+			if vid, ok := num(m["project_view_id"]); ok {
+				payload["project_view_id"] = vid
+			}
+			if pos, ok := num(m["position"]); ok {
+				payload["position"] = pos
+			}
+			return c.Put(ctx, url("/tasks/%d/position", taskID), payload, out)
+		}
+	}
+	return c.updateVerb(ctx, url("/tasks/%d/position", taskID), body, out)
+}
+
+func num(v any) (float64, bool) {
+	switch n := v.(type) {
+	case float64:
+		return n, true
+	case int:
+		return float64(n), true
+	case int64:
+		return float64(n), true
+	case json.Number:
+		f, err := n.Float64()
+		return f, err == nil
+	}
+	return 0, false
 }
 
 func (c *Client) SetReminders(ctx context.Context, taskID int, reminders []string, out any) error {
@@ -137,7 +174,7 @@ func (c *Client) SetReminders(ctx context.Context, taskID int, reminders []strin
 }
 
 func (c *Client) AddTaskLabel(ctx context.Context, taskID, labelID int, out any) error {
-	return c.Put(ctx, url("/tasks/%d/labels", taskID), map[string]int{"label_id": labelID}, out)
+	return c.createVerb(ctx, url("/tasks/%d/labels", taskID), map[string]int{"label_id": labelID}, out)
 }
 
 func (c *Client) RemoveTaskLabel(ctx context.Context, taskID, labelID int) error {
@@ -145,14 +182,14 @@ func (c *Client) RemoveTaskLabel(ctx context.Context, taskID, labelID int) error
 }
 
 func (c *Client) CreateTaskRelation(ctx context.Context, taskID int, kind string, otherTaskID int, out any) error {
-	return c.Put(ctx, url("/tasks/%d/relations", taskID), map[string]any{
+	return c.createVerb(ctx, url("/tasks/%d/relations", taskID), map[string]any{
 		"other_task_id": otherTaskID,
 		"relation_kind": kind,
 	}, out)
 }
 
 func (c *Client) AssignUser(ctx context.Context, taskID, userID int, out any) error {
-	return c.Put(ctx, url("/tasks/%d/assignees", taskID), map[string]int{"user_id": userID}, out)
+	return c.createVerb(ctx, url("/tasks/%d/assignees", taskID), map[string]int{"user_id": userID}, out)
 }
 
 func (c *Client) UnassignUser(ctx context.Context, taskID, userID int) error {
@@ -160,7 +197,17 @@ func (c *Client) UnassignUser(ctx context.Context, taskID, userID int) error {
 }
 
 func (c *Client) CreateRelation(ctx context.Context, taskID int, kind string, body, out any) error {
-	return c.Put(ctx, url("/tasks/%d/relations/%s", taskID, kind), body, out)
+	if c.api == "v1" {
+		return c.Put(ctx, url("/tasks/%d/relations/%s", taskID, kind), body, out)
+	}
+	// v2 has no per-kind path: relation kind travels in the body.
+	payload := map[string]any{"relation_kind": kind}
+	if m, ok := body.(map[string]any); ok {
+		for k, v := range m {
+			payload[k] = v
+		}
+	}
+	return c.Post(ctx, url("/tasks/%d/relations", taskID), payload, out)
 }
 
 func (c *Client) ListRelations(ctx context.Context, taskID int, out any) error {
@@ -173,15 +220,15 @@ type View struct {
 }
 
 func (c *Client) ListViews(ctx context.Context, projectID int, out any) error {
-	return c.Get(ctx, url("/projects/%d/views", projectID), nil, out)
+	return c.List(ctx, url("/projects/%d/views", projectID), ListOptions{}, out)
 }
 
 func (c *Client) CreateView(ctx context.Context, projectID int, body, out any) error {
-	return c.Put(ctx, url("/projects/%d/views", projectID), body, out)
+	return c.createVerb(ctx, url("/projects/%d/views", projectID), body, out)
 }
 
 func (c *Client) UpdateView(ctx context.Context, projectID, viewID int, body, out any) error {
-	return c.Post(ctx, url("/projects/%d/views/%d", projectID, viewID), body, out)
+	return c.updateVerb(ctx, url("/projects/%d/views/%d", projectID, viewID), body, out)
 }
 
 func (c *Client) DeleteView(ctx context.Context, projectID, viewID int) error {
@@ -189,15 +236,53 @@ func (c *Client) DeleteView(ctx context.Context, projectID, viewID int) error {
 }
 
 func (c *Client) ViewTasks(ctx context.Context, projectID, viewID int, out any) error {
-	return c.Get(ctx, url("/projects/%d/views/%d/tasks", projectID, viewID), nil, out)
+	if c.api == "v1" {
+		// v1 returns buckets with nested tasks.
+		return c.Get(ctx, url("/projects/%d/views/%d/tasks", projectID, viewID), nil, out)
+	}
+	// v2 returns a flat paginated task list: reassemble the v1-style
+	// bucket shape (id/title/position/tasks) for callers.
+	var buckets []map[string]any
+	if err := c.List(ctx, url("/projects/%d/views/%d/buckets", projectID, viewID), ListOptions{}, &buckets); err != nil {
+		return err
+	}
+	var tasks []map[string]any
+	if err := c.List(ctx, url("/projects/%d/views/%d/tasks", projectID, viewID), ListOptions{}, &tasks); err != nil {
+		return err
+	}
+	byID := map[float64]map[string]any{}
+	for _, b := range buckets {
+		id, _ := b["id"].(float64)
+		b["tasks"] = []any{}
+		byID[id] = b
+	}
+	for _, t := range tasks {
+		bid, _ := t["bucket_id"].(float64)
+		var b map[string]any
+		if got, ok := byID[bid]; ok {
+			b = got
+		} else if len(buckets) > 0 {
+			// v2.6 does not auto-assign a default bucket on task create;
+			// bucketless tasks surface in the first bucket (UI behavior).
+			b = buckets[0]
+		} else {
+			continue
+		}
+		b["tasks"] = append(b["tasks"].([]any), t)
+	}
+	raw, err := json.Marshal(buckets)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(raw, out)
 }
 
 func (c *Client) ListBuckets(ctx context.Context, projectID, viewID int, out any) error {
-	return c.Get(ctx, url("/projects/%d/views/%d/buckets", projectID, viewID), nil, out)
+	return c.List(ctx, url("/projects/%d/views/%d/buckets", projectID, viewID), ListOptions{}, out)
 }
 
 func (c *Client) CreateBucket(ctx context.Context, projectID, viewID int, body, out any) error {
-	return c.Put(ctx, url("/projects/%d/views/%d/buckets", projectID, viewID), body, out)
+	return c.createVerb(ctx, url("/projects/%d/views/%d/buckets", projectID, viewID), body, out)
 }
 
 func (c *Client) DeleteBucket(ctx context.Context, projectID, viewID, bucketID int) error {
@@ -205,7 +290,7 @@ func (c *Client) DeleteBucket(ctx context.Context, projectID, viewID, bucketID i
 }
 
 func (c *Client) BucketTasks(ctx context.Context, projectID, viewID int, out any) error {
-	return c.Get(ctx, url("/projects/%d/views/%d/tasks", projectID, viewID), nil, out)
+	return c.List(ctx, url("/projects/%d/views/%d/tasks", projectID, viewID), ListOptions{}, out)
 }
 
 type Label struct {
@@ -214,11 +299,11 @@ type Label struct {
 }
 
 func (c *Client) ListLabels(ctx context.Context, out any) error {
-	return c.Get(ctx, "/labels", nil, out)
+	return c.List(ctx, "/labels", ListOptions{}, out)
 }
 
 func (c *Client) CreateLabel(ctx context.Context, body, out any) error {
-	return c.Put(ctx, "/labels", body, out)
+	return c.createVerb(ctx, "/labels", body, out)
 }
 
 func (c *Client) DeleteLabel(ctx context.Context, labelID int) error {
@@ -238,15 +323,15 @@ type Comment struct {
 }
 
 func (c *Client) TaskComments(ctx context.Context, taskID int, out any) error {
-	return c.Get(ctx, url("/tasks/%d/comments", taskID), nil, out)
+	return c.List(ctx, url("/tasks/%d/comments", taskID), ListOptions{}, out)
 }
 
 func (c *Client) AddComment(ctx context.Context, taskID int, body, out any) error {
-	return c.Put(ctx, url("/tasks/%d/comments", taskID), body, out)
+	return c.createVerb(ctx, url("/tasks/%d/comments", taskID), body, out)
 }
 
 func (c *Client) UpdateComment(ctx context.Context, taskID, commentID int, body, out any) error {
-	return c.Post(ctx, url("/tasks/%d/comments/%d", taskID, commentID), body, out)
+	return c.updateVerb(ctx, url("/tasks/%d/comments/%d", taskID, commentID), body, out)
 }
 
 func (c *Client) DeleteComment(ctx context.Context, taskID, commentID int) error {
@@ -272,7 +357,7 @@ func (c *Client) MoveTaskToBucket(ctx context.Context, projectID, viewID, bucket
 		"project_view_id": viewID,
 		"bucket_id":       bucketID,
 	}
-	return c.Post(ctx, url("/projects/%d/views/%d/buckets/%d/tasks", projectID, viewID, bucketID), body, out)
+	return c.updateVerb(ctx, url("/projects/%d/views/%d/buckets/%d/tasks", projectID, viewID, bucketID), body, out)
 }
 
 type Team struct {
@@ -302,11 +387,11 @@ func (c *Client) GetTeam(ctx context.Context, teamID int, out any) error {
 }
 
 func (c *Client) CreateTeam(ctx context.Context, body, out any) error {
-	return c.Put(ctx, "/teams", body, out)
+	return c.createVerb(ctx, "/teams", body, out)
 }
 
 func (c *Client) UpdateTeam(ctx context.Context, teamID int, body, out any) error {
-	return c.Post(ctx, url("/teams/%d", teamID), body, out)
+	return c.updateVerb(ctx, url("/teams/%d", teamID), body, out)
 }
 
 func (c *Client) DeleteTeam(ctx context.Context, teamID int) error {
@@ -314,7 +399,7 @@ func (c *Client) DeleteTeam(ctx context.Context, teamID int) error {
 }
 
 func (c *Client) AddTeamMember(ctx context.Context, teamID int, username string, out any) error {
-	return c.Put(ctx, url("/teams/%d/members", teamID), map[string]any{"username": username}, out)
+	return c.createVerb(ctx, url("/teams/%d/members", teamID), map[string]any{"username": username}, out)
 }
 
 func (c *Client) RemoveTeamMember(ctx context.Context, teamID int, username string) error {

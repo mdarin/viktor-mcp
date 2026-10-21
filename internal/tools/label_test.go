@@ -38,6 +38,10 @@ func (f *fakeLabels) handler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	switch {
 	case r.Method == http.MethodGet && r.URL.Path == "/api/v2/labels":
+		if p := r.URL.Query().Get("page"); p != "" && p != "1" {
+			json.NewEncoder(w).Encode([]any{})
+			return
+		}
 		out := []map[string]any{}
 		for _, l := range f.labels {
 			if !f.deleted[int(l["id"].(float64))] {
@@ -45,7 +49,7 @@ func (f *fakeLabels) handler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		json.NewEncoder(w).Encode(out)
-	case r.Method == http.MethodPut && r.URL.Path == "/api/v2/labels":
+	case r.Method == http.MethodPost && r.URL.Path == "/api/v2/labels":
 		var b map[string]any
 		json.NewDecoder(r.Body).Decode(&b)
 		f.nextID++
@@ -64,7 +68,7 @@ func (f *fakeLabels) handler(w http.ResponseWriter, r *http.Request) {
 		var taskID, labelID int
 		if _, err := fmt.Sscanf(r.URL.Path, "/api/v2/tasks/%d/labels", &taskID); err == nil {
 			switch r.Method {
-			case http.MethodPut:
+			case http.MethodPost:
 				var b map[string]int
 				json.NewDecoder(r.Body).Decode(&b)
 				labelID = b["label_id"]

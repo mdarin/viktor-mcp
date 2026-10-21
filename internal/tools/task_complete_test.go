@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -35,7 +36,7 @@ func (f *fakeVikunja) handler(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == http.MethodGet && r.URL.Path == "/api/v2/tasks/42":
 		json.NewEncoder(w).Encode(f.task)
-	case r.Method == http.MethodPost && r.URL.Path == "/api/v2/tasks/42":
+	case r.Method == http.MethodPut && r.URL.Path == "/api/v2/tasks/42":
 		var patch map[string]any
 		json.Unmarshal(body, &patch)
 		for k, v := range patch {
@@ -46,17 +47,25 @@ func (f *fakeVikunja) handler(w http.ResponseWriter, r *http.Request) {
 		}
 		json.NewEncoder(w).Encode(f.task)
 	case r.Method == http.MethodGet && r.URL.Path == "/api/v2/projects/8/views":
+		if p := r.URL.Query().Get("page"); p != "" && p != "1" {
+			json.NewEncoder(w).Encode([]any{})
+			return
+		}
 		json.NewEncoder(w).Encode([]map[string]any{f.view})
 	case r.Method == http.MethodGet && r.URL.Path == "/api/v2/projects/8/views/32/buckets":
+		if p := r.URL.Query().Get("page"); p != "" && p != "1" {
+			json.NewEncoder(w).Encode([]any{})
+			return
+		}
 		json.NewEncoder(w).Encode(f.buckets)
-	case r.Method == http.MethodPut && r.URL.Path == "/api/v2/projects/8/views/32/buckets":
+	case r.Method == http.MethodPost && r.URL.Path == "/api/v2/projects/8/views/32/buckets":
 		var nb map[string]any
 		json.Unmarshal(body, &nb)
 		f.nextBucketID++
 		nb["id"] = float64(f.nextBucketID)
 		f.buckets = append(f.buckets, nb)
 		json.NewEncoder(w).Encode(nb)
-	case r.Method == http.MethodPost && r.URL.Path == "/api/v2/projects/8/views/32":
+	case r.Method == http.MethodPut && r.URL.Path == "/api/v2/projects/8/views/32":
 		var patch map[string]any
 		json.Unmarshal(body, &patch)
 		for k, v := range patch {
@@ -64,21 +73,22 @@ func (f *fakeVikunja) handler(w http.ResponseWriter, r *http.Request) {
 		}
 		json.NewEncoder(w).Encode(f.view)
 	case r.Method == http.MethodGet && r.URL.Path == "/api/v2/projects/8/views/32/tasks":
-		buckets := make([]map[string]any, 0, len(f.buckets))
-		for _, b := range f.buckets {
-			buckets = append(buckets, map[string]any{
-				"id":    b["id"],
-				"title": b["title"],
-				"tasks": []any{},
-			})
+		if p := r.URL.Query().Get("page"); p != "" && p != "1" {
+			json.NewEncoder(w).Encode([]any{})
+			return
 		}
-		for i, b := range f.buckets {
-			if int(b["id"].(float64)) == int(f.task["bucket_id"].(float64)) {
-				buckets[i]["tasks"] = []any{f.task}
-			}
+		json.NewEncoder(w).Encode([]any{f.task})
+	case r.Method == http.MethodPut && strings.Contains(r.URL.Path, "/buckets/") && strings.HasSuffix(r.URL.Path, "/tasks"):
+		var pos map[string]any
+		json.Unmarshal(body, &pos)
+		f.positionsBody = pos
+		var bid int
+		if parts := strings.Split(r.URL.Path, "/buckets/"); len(parts) == 2 {
+			fmt.Sscanf(parts[1], "%d", &bid)
 		}
-		json.NewEncoder(w).Encode(buckets)
-	case r.Method == http.MethodPost && r.URL.Path == "/api/v2/tasks/42/position":
+		f.task["bucket_id"] = float64(bid)
+		w.WriteHeader(http.StatusOK)
+	case r.Method == http.MethodPut && r.URL.Path == "/api/v2/tasks/42/position":
 		var pos map[string]any
 		json.Unmarshal(body, &pos)
 		f.positionsBody = pos
@@ -169,9 +179,9 @@ func TestCompleteHappyPath(t *testing.T) {
 		t.Error("fallback must not fire on happy path")
 	}
 	for _, ep := range []string{
-		"POST /api/v2/projects/8/views/32",
-		"PUT /api/v2/projects/8/views/32/buckets",
-		"POST /api/v2/tasks/42/position",
+		"PUT /api/v2/projects/8/views/32",
+		"POST /api/v2/projects/8/views/32/buckets",
+		"PUT /api/v2/tasks/42/position",
 	} {
 		if f.calls[ep] != 0 {
 			t.Errorf("%s must not be called on happy path", ep)
@@ -187,10 +197,10 @@ func TestCompleteAutoConfiguresDoneBucket(t *testing.T) {
 	f.view["done_bucket_id"] = float64(0)
 	out := callComplete(t, session)
 
-	if f.calls["POST /api/v2/projects/8/views/32"] != 1 {
+	if f.calls["PUT /api/v2/projects/8/views/32"] != 1 {
 		t.Errorf("view must be configured once, calls=%v", f.calls)
 	}
-	if f.calls["PUT /api/v2/projects/8/views/32/buckets"] != 0 {
+	if f.calls["POST /api/v2/projects/8/views/32/buckets"] != 0 {
 		t.Error("existing done bucket must be reused, not recreated")
 	}
 	if out["bucket_id"] != float64(43) {
@@ -208,7 +218,7 @@ func TestCompleteCreatesMissingDoneBucket(t *testing.T) {
 
 	out := callComplete(t, session)
 
-	if f.calls["PUT /api/v2/projects/8/views/32/buckets"] != 1 {
+	if f.calls["POST /api/v2/projects/8/views/32/buckets"] != 1 {
 		t.Errorf("done bucket must be created once, calls=%v", f.calls)
 	}
 	if out["bucket_id"] != float64(51) {
@@ -223,8 +233,8 @@ func TestCompleteFallsBackToPosition(t *testing.T) {
 	f, session := newCompleteFixture(t, true)
 	out := callComplete(t, session)
 
-	if f.calls["POST /api/v2/tasks/42/position"] != 1 {
-		t.Errorf("fallback position must fire once, calls=%v", f.calls)
+	if f.calls["PUT /api/v2/projects/8/views/32/buckets/43/tasks"] != 1 {
+		t.Errorf("fallback bucket-move must fire once, calls=%v", f.calls)
 	}
 	if out["fallback_used"] != true {
 		t.Error("fallback_used must be reported")
@@ -232,12 +242,8 @@ func TestCompleteFallsBackToPosition(t *testing.T) {
 	if out["bucket_id"] != float64(43) {
 		t.Errorf("final bucket_id = %v, want 43", out["bucket_id"])
 	}
-	pos := fmt.Sprint(f.positionsBody["bucket_id"])
-	if pos != "43" {
-		t.Errorf("position body bucket_id = %v, want 43", f.positionsBody)
-	}
-	if f.positionsBody["project_view_id"] != float64(32) {
-		t.Errorf("position body project_view_id = %v, want 32", f.positionsBody)
+	if tid := fmt.Sprint(f.positionsBody["task_id"]); tid != "42" {
+		t.Errorf("bucket-move body task_id = %v, want 42", f.positionsBody)
 	}
 }
 

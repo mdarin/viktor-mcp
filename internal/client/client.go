@@ -82,8 +82,25 @@ func NewWithAPI(baseURL, token string, timeout time.Duration, apiVersion string)
 // APIVersion returns the URL prefix version this client talks to.
 func (c *Client) APIVersion() string { return c.api }
 
-func (c *Client) SetRateLimit(rps float64) *Client {
-	if rps <= 0 {
+// createVerb picks the create-method verb per API version: Vikunja v1
+// creates with PUT, v2 with POST (verified live on 2.6.0, card #56).
+func (c *Client) createVerb(ctx context.Context, path string, body, out any) error {
+	if c.api == "v1" {
+		return c.Put(ctx, path, body, out)
+	}
+	return c.Post(ctx, path, body, out)
+}
+
+// updateVerb picks the update-method verb per API version: v1 updates
+// with POST, v2 with PUT.
+func (c *Client) updateVerb(ctx context.Context, path string, body, out any) error {
+	if c.api == "v1" {
+		return c.Post(ctx, path, body, out)
+	}
+	return c.Put(ctx, path, body, out)
+}
+
+func (c *Client) SetRateLimit(rps float64) *Client {	if rps <= 0 {
 		c.limiter = nil
 		return c
 	}

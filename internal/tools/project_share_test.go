@@ -37,7 +37,7 @@ func (f *fakeShare) handler(w http.ResponseWriter, r *http.Request) {
 			out = []map[string]any{}
 		}
 		json.NewEncoder(w).Encode(out)
-	case r.Method == http.MethodPut && r.URL.Path == "/api/v2/projects/9/users":
+	case r.Method == http.MethodPost && r.URL.Path == "/api/v2/projects/9/users":
 		var b map[string]any
 		json.NewDecoder(r.Body).Decode(&f.putBody)
 		f.shared = append(f.shared, map[string]any{

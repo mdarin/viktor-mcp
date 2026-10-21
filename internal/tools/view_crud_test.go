@@ -36,7 +36,7 @@ func TestViewGetTasksKanban(t *testing.T) {
 		t.Fatalf("kanban board = %v", out)
 	}
 	buckets := out["buckets"].([]any)
-	if len(buckets) != 2 || buckets[0].(map[string]any)["title"] != "todo" {
+	if len(buckets) != 2 || buckets[0].(map[string]any)["title"] != "To-Do" {
 		t.Fatalf("buckets = %v", buckets)
 	}
 }
@@ -48,7 +48,7 @@ func TestKanbanTasksByBucket(t *testing.T) {
 		t.Fatal(err)
 	}
 	grouped := out["by_bucket"].(map[string]any)
-	if grouped["todo"] == nil {
+	if grouped["To-Do"] == nil {
 		t.Fatalf("by_bucket = %v", grouped)
 	}
 }
@@ -104,7 +104,7 @@ func TestKanbanSortBucket(t *testing.T) {
 		t.Fatalf("moves = %v", f.moves)
 	}
 	first := f.moves[0]
-	if first["task_id"] != float64(302) || first["bucket_id"] != float64(41) {
+	if first["task_id"] != float64(302) || first["position"] != float64(1000) {
 		t.Fatalf("first move = %v", first)
 	}
 	if _, err := callCRUD(t, session, "kanban_sort_bucket", map[string]any{"project_id": 8, "view_id": 40, "bucket_id": 41}); err == nil {

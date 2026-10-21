@@ -302,3 +302,108 @@ func TestV1RollbackFlag(t *testing.T) {
 		t.Errorf("api version = %s, want v1", c.APIVersion())
 	}
 }
+
+func TestVerbSelection(t *testing.T) {
+	tests := []struct {
+		name       string
+		api        string
+		wantCreate string
+		wantUpdate string
+	}{
+		{"v1: create=PUT update=POST", "v1", http.MethodPut, http.MethodPost},
+		{"v2: create=POST update=PUT", "v2", http.MethodPost, http.MethodPut},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var gotCreate, gotUpdate string
+			c, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				switch {
+				case strings.HasSuffix(r.URL.Path, "/projects"):
+					gotCreate = r.Method
+				case strings.HasSuffix(r.URL.Path, "/projects/1"):
+					gotUpdate = r.Method
+				}
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte(`{"id":1}`))
+			})
+			c.api = tt.api
+
+			var out map[string]any
+			if err := c.CreateProject(context.Background(), "x", &out); err != nil {
+				t.Fatal(err)
+			}
+			if err := c.UpdateProject(context.Background(), 1, map[string]any{"title": "y"}, &out); err != nil {
+				t.Fatal(err)
+			}
+			if gotCreate != tt.wantCreate {
+				t.Errorf("create verb = %s, want %s", gotCreate, tt.wantCreate)
+			}
+			if gotUpdate != tt.wantUpdate {
+				t.Errorf("update verb = %s, want %s", gotUpdate, tt.wantUpdate)
+			}
+		})
+	}
+}
+
+func TestSetTaskPositionV2(t *testing.T) {
+	var path, method string
+	var body map[string]any
+	c, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		method, path = r.Method, r.URL.Path
+		var m map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&m)
+		body = m
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{}`))
+	})
+	c.api = "v2"
+
+	if err := c.SetTaskPosition(context.Background(), 42, map[string]any{
+		"project_id": 8, "project_view_id": 32, "bucket_id": 43,
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasSuffix(path, "/projects/8/views/32/buckets/43/tasks") || method != http.MethodPut {
+		t.Errorf("bucket move = %s %s", method, path)
+	}
+	if body["task_id"] != float64(42) {
+		t.Errorf("payload = %v", body)
+	}
+
+	if err := c.SetTaskPosition(context.Background(), 42, map[string]any{
+		"project_view_id": 32, "position": float64(1000),
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasSuffix(path, "/tasks/42/position") || method != http.MethodPut {
+		t.Errorf("sort = %s %s", method, path)
+	}
+	if _, has := body["task_id"]; has {
+		t.Errorf("sort payload must not carry task_id: %v", body)
+	}
+	if body["project_view_id"] != float64(32) || body["position"] != float64(1000) {
+		t.Errorf("sort payload = %v", body)
+	}
+}
+
+func TestSetTaskPositionV1Unchanged(t *testing.T) {
+	var method string
+	c, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		method = r.Method
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{}`))
+	})
+	c.api = "v1"
+
+	if err := c.SetTaskPosition(context.Background(), 42, map[string]any{
+		"project_view_id": 32, "task_id": 42, "bucket_id": 43,
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if method != http.MethodPost {
+		t.Errorf("v1 position verb = %s, want POST", method)
+	}
+}

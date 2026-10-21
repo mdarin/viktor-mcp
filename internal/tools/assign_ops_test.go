@@ -20,7 +20,7 @@ func TestAssignQueueListsItems(t *testing.T) {
 	}
 	items := out["items"].([]any)
 	first := items[0].(map[string]any)
-	if first["task_id"] != float64(360) || first["bucket"] != "todo" || first["priority"] != float64(3) {
+	if first["task_id"] != float64(360) || first["bucket"] != "To-Do" || first["priority"] != float64(3) {
 		t.Fatalf("item = %v", first)
 	}
 }

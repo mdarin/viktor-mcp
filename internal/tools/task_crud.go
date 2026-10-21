@@ -156,6 +156,7 @@ func handleTaskMove(r *Registry) mcp.ToolHandlerFor[TaskMoveIn, any] {
 func handleTaskSetPosition(r *Registry) mcp.ToolHandlerFor[TaskSetPositionIn, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in TaskSetPositionIn) (*mcp.CallToolResult, any, error) {
 		body := map[string]any{
+			"project_id":      in.ProjectID,
 			"project_view_id": in.ViewID,
 			"task_id":         in.TaskID,
 			"bucket_id":       in.BucketID,

@@ -136,9 +136,7 @@ func handleKanbanSortBucket(r *Registry) mcp.ToolHandlerFor[KanbanSortBucketIn, 
 		for i, t := range sorted {
 			tm := t.(map[string]any)
 			body := map[string]any{
-				"task_id":         asInt(tm["id"]),
 				"project_view_id": in.ViewID,
-				"bucket_id":       in.BucketID,
 				"position":        float64(i+1) * 1000,
 			}
 			if err := r.api().SetTaskPosition(ctx, asInt(tm["id"]), body, nil); err != nil {

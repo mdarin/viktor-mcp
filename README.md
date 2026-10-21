@@ -196,6 +196,7 @@ go test ./internal/tools -update-snapshot
 | `batch_reorder_tasks` | Set positions for multiple tasks in a view |
 | `batch_update_tasks` | Update multiple tasks at once |
 | `cal_add_event` | Add an event to the calendar by creating a labeled task |
+| `claim_task` | Atomically claim a task for in_progress work with request_id idempotency (FSM) |
 | `comment_add` | Add a comment to a task |
 | `comment_delete` | Delete a comment |
 | `comment_list` | List comments on a task |
@@ -208,6 +209,8 @@ go test ./internal/tools -update-snapshot
 | `config_update` | Update an existing config value |
 | `ctx_get` | Get the current default instance and project context |
 | `ctx_set` | Set default instance and project for subsequent queries |
+| `fsm_state` | Report or change the FSM state of a task; forbidden transitions are rejected |
+| `get_task_context` | Task context budgeted by its FSM state (only status-relevant fields) |
 | `instance_check_health` | Check if a Vikunja API token is valid |
 | `instance_connect` | Add and connect a new Vikunja instance |
 | `instance_disconnect` | Remove a configured Vikunja instance |
@@ -244,6 +247,7 @@ go test ./internal/tools -update-snapshot
 | `shadow_clear` | Remove already-synced entries from the shadow journal |
 | `shadow_status` | Show shadow-mode state: online/offline, pending queue size, mirror root |
 | `shadow_sync` | Probe the tracker and report shadow-queue synchronization state |
+| `submit_for_review` | Move a claimed task to in_review after validating the git artifact |
 | `task_add_label` | Add a label to a task |
 | `task_assign_user` | Assign a user to a task |
 | `task_batch_get` | Fetch multiple tasks concurrently, results in request order |

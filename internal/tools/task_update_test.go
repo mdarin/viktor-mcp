@@ -118,7 +118,7 @@ func TestTaskUpdateE2E(t *testing.T) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v2/tasks/42":
 			json.NewEncoder(w).Encode(currentTaskBody())
-		case r.Method == http.MethodPost && r.URL.Path == "/api/v2/tasks/42":
+		case r.Method == http.MethodPut && r.URL.Path == "/api/v2/tasks/42":
 			body, _ := io.ReadAll(r.Body)
 			posted.Store(string(body))
 			json.NewEncoder(w).Encode(currentTaskBody())
@@ -162,22 +162,22 @@ func TestTaskUpdateE2E(t *testing.T) {
 
 	body := posted.Load().(string)
 	if body == "" {
-		t.Fatal("no POST body captured")
+		t.Fatal("no PUT body captured")
 	}
 	var sent map[string]any
 	json.Unmarshal([]byte(body), &sent)
 
 	if sent["description"] != "patched description" {
-		t.Errorf("POST description = %v, want patched", sent["description"])
+		t.Errorf("PUT description = %v, want patched", sent["description"])
 	}
 	if sent["priority"] != float64(3) {
-		t.Errorf("POST must carry full body, priority lost: %v", sent["priority"])
+		t.Errorf("PUT must carry full body, priority lost: %v", sent["priority"])
 	}
 	if _, ok := sent["labels"]; !ok {
-		t.Error("POST must carry full body, labels lost")
+		t.Error("PUT must carry full body, labels lost")
 	}
 	if sent["due_date"] != "2026-11-01T12:00:00Z" {
-		t.Errorf("POST must carry full body, due_date lost: %v", sent["due_date"])
+		t.Errorf("PUT must carry full body, due_date lost: %v", sent["due_date"])
 	}
 }
 

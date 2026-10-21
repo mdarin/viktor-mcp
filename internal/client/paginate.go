@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"strconv"
 )
 
@@ -69,6 +70,9 @@ func (c *Client) List(ctx context.Context, path string, opts ListOptions, out an
 	}
 	var all []json.RawMessage
 	for pageNum := 1; len(all) < opts.Limit; pageNum++ {
+		if pageNum > 1000 {
+			return fmt.Errorf("list %s: pagination did not terminate after 1000 pages", path)
+		}
 		o := opts
 		o.Page = pageNum
 		n, total, err := c.pageItems(ctx, path, o.query(c.api), &all)

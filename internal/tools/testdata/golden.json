@@ -449,6 +449,35 @@
     "name": "cal_add_event"
   },
   {
+    "description": "Atomically claim a task for in_progress work with request_id idempotency (FSM)",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "actor": {
+          "description": "who claims (bot user name)",
+          "type": "string"
+        },
+        "instance": {
+          "type": "string"
+        },
+        "request_id": {
+          "description": "unique request id: a repeat with the same id returns the stored result instead of claiming twice",
+          "type": "string"
+        },
+        "task_id": {
+          "description": "task to claim for in_progress work",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "task_id",
+        "request_id"
+      ],
+      "type": "object"
+    },
+    "name": "claim_task"
+  },
+  {
     "description": "Add a comment to a task",
     "inputSchema": {
       "additionalProperties": false,
@@ -644,6 +673,54 @@
       "type": "object"
     },
     "name": "ctx_set"
+  },
+  {
+    "description": "Report or change the FSM state of a task; forbidden transitions are rejected",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "actor": {
+          "type": "string"
+        },
+        "instance": {
+          "type": "string"
+        },
+        "request_id": {
+          "type": "string"
+        },
+        "task_id": {
+          "type": "integer"
+        },
+        "to": {
+          "description": "target state; empty = report current state only",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id"
+      ],
+      "type": "object"
+    },
+    "name": "fsm_state"
+  },
+  {
+    "description": "Task context budgeted by its FSM state (only status-relevant fields)",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "instance": {
+          "type": "string"
+        },
+        "task_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "task_id"
+      ],
+      "type": "object"
+    },
+    "name": "get_task_context"
   },
   {
     "description": "Check if a Vikunja API token is valid",
@@ -1320,6 +1397,39 @@
       "type": "object"
     },
     "name": "shadow_sync"
+  },
+  {
+    "description": "Move a claimed task to in_review after validating the git artifact",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "actor": {
+          "type": "string"
+        },
+        "instance": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        },
+        "repo": {
+          "description": "path to the git repo with the work artifacts; validated before the transition",
+          "type": "string"
+        },
+        "request_id": {
+          "description": "unique request id for idempotent submit",
+          "type": "string"
+        },
+        "task_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "task_id"
+      ],
+      "type": "object"
+    },
+    "name": "submit_for_review"
   },
   {
     "description": "Add a label to a task",

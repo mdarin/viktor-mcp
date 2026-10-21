@@ -467,7 +467,7 @@ func handleBatchAssignBuckets(r *Registry) mcp.ToolHandlerFor[BatchAssignBuckets
 			row := map[string]any{"task_id": float64(a.TaskID), "bucket_id": float64(a.BucketID)}
 			if a.Position != 0 {
 				var out any
-				if err := r.api().SetTaskPosition(ctx, a.TaskID, map[string]any{"position": float64(a.Position)}, &out); err != nil {
+				if err := r.api().SetTaskPosition(ctx, a.TaskID, map[string]any{"project_view_id": in.ViewID, "position": float64(a.Position)}, &out); err != nil {
 					failures = append(failures, map[string]any{"index": float64(i), "task_id": float64(a.TaskID), "error": fmt.Sprintf("position: %v", err)})
 				}
 			}
@@ -528,7 +528,7 @@ func handleBatchReorderTasks(r *Registry) mcp.ToolHandlerFor[BatchReorderTasksIn
 				continue
 			}
 			var out any
-			if err := r.api().SetTaskPosition(ctx, p.TaskID, map[string]any{"position": float64(p.Position)}, &out); err != nil {
+			if err := r.api().SetTaskPosition(ctx, p.TaskID, map[string]any{"project_view_id": in.ViewID, "position": float64(p.Position)}, &out); err != nil {
 				failures = append(failures, map[string]any{"index": float64(i), "task_id": float64(p.TaskID), "error": err.Error()})
 				continue
 			}

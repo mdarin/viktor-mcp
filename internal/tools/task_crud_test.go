@@ -92,6 +92,10 @@ func (f *fakeCRUD) handler(w http.ResponseWriter, r *http.Request) {
 		}
 		json.NewEncoder(w).Encode(f.filteredTasks(filter))
 	case strings.HasPrefix(path, "/api/v2/tasks/") && strings.HasSuffix(path, "/comments") && r.Method == http.MethodGet:
+		if p := r.URL.Query().Get("page"); p != "" && p != "1" {
+			json.NewEncoder(w).Encode([]any{})
+			return
+		}
 		var id int
 		fmt.Sscanf(path, "/api/v2/tasks/%d", &id)
 		rows := []map[string]any{}
@@ -99,7 +103,7 @@ func (f *fakeCRUD) handler(w http.ResponseWriter, r *http.Request) {
 			rows = append(rows, map[string]any{"id": float64(i + 1), "comment": text, "task_id": float64(id), "author": map[string]any{"username": "fake"}})
 		}
 		json.NewEncoder(w).Encode(rows)
-	case strings.HasPrefix(path, "/api/v2/tasks/") && strings.Contains(path, "/comments/") && (r.Method == http.MethodPost || r.Method == http.MethodDelete):
+	case strings.HasPrefix(path, "/api/v2/tasks/") && strings.Contains(path, "/comments/") && (r.Method == http.MethodPut || r.Method == http.MethodDelete):
 		var tid, cid int
 		fmt.Sscanf(path, "/api/v2/tasks/%d/comments/%d", &tid, &cid)
 		cs := f.comments[tid]
@@ -142,7 +146,7 @@ func (f *fakeCRUD) handler(w http.ResponseWriter, r *http.Request) {
 			out["related_tasks"] = rt
 		}
 		json.NewEncoder(w).Encode(out)
-	case strings.HasPrefix(path, "/api/v2/tasks/") && strings.HasSuffix(path, "/relations") && r.Method == http.MethodPut:
+	case strings.HasPrefix(path, "/api/v2/tasks/") && strings.HasSuffix(path, "/relations") && r.Method == http.MethodPost:
 		var id int
 		fmt.Sscanf(path, "/api/v2/tasks/%d", &id)
 		var b map[string]any
@@ -167,14 +171,16 @@ func (f *fakeCRUD) handler(w http.ResponseWriter, r *http.Request) {
 		f.relations[id][kind] = append(f.relations[id][kind], other)
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(map[string]any{"task_id": id, "other_task_id": other, "relation_kind": kind})
-	case strings.HasPrefix(path, "/api/v2/tasks/") && r.Method == http.MethodPost:
-		if strings.HasSuffix(path, "/position") {
-			var b map[string]any
-			json.NewDecoder(r.Body).Decode(&b)
-			f.moves = append(f.moves, b)
-			json.NewEncoder(w).Encode(map[string]any{"position": b["position"], "bucket_id": b["bucket_id"]})
-			return
-		}
+	case strings.HasPrefix(path, "/api/v2/tasks/") && strings.HasSuffix(path, "/position") && r.Method == http.MethodPut:
+		var id int
+		fmt.Sscanf(path, "/api/v2/tasks/%d", &id)
+		var b map[string]any
+		json.NewDecoder(r.Body).Decode(&b)
+		b["task_id"] = float64(id)
+		f.moves = append(f.moves, b)
+		json.NewEncoder(w).Encode(map[string]any{"position": b["position"], "bucket_id": b["bucket_id"]})
+		return
+	case strings.HasPrefix(path, "/api/v2/tasks/") && r.Method == http.MethodPut:
 		var id int
 		fmt.Sscanf(path, "/api/v2/tasks/%d", &id)
 		var b map[string]any
@@ -219,7 +225,7 @@ func (f *fakeCRUD) handler(w http.ResponseWriter, r *http.Request) {
 		delete(f.tasks, id)
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]any{"ok": true})
-	case strings.HasPrefix(path, "/api/v2/tasks/") && r.Method == http.MethodPut:
+	case strings.HasPrefix(path, "/api/v2/tasks/") && r.Method == http.MethodPost:
 		if strings.HasSuffix(path, "/assignees") {
 			var id int
 			fmt.Sscanf(path, "/api/v2/tasks/%d", &id)
@@ -258,7 +264,7 @@ func (f *fakeCRUD) handler(w http.ResponseWriter, r *http.Request) {
 	case strings.HasPrefix(path, "/api/v2/tasks/") && r.Method == http.MethodDelete && strings.Contains(path, "/assignees/"):
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]any{"ok": true})
-	case strings.HasPrefix(path, "/api/v2/projects/") && strings.HasSuffix(path, "/tasks") && r.Method == http.MethodPut:
+	case strings.HasPrefix(path, "/api/v2/projects/") && strings.HasSuffix(path, "/tasks") && r.Method == http.MethodPost:
 		var b map[string]any
 		json.NewDecoder(r.Body).Decode(&b)
 		f.nextID++
@@ -285,7 +291,7 @@ func (f *fakeCRUD) handler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		json.NewEncoder(w).Encode(out)
-	case strings.HasSuffix(path, "/position") && r.Method == http.MethodPost:
+	case strings.HasSuffix(path, "/position") && r.Method == http.MethodPut:
 		var b map[string]any
 		json.NewDecoder(r.Body).Decode(&b)
 		json.NewEncoder(w).Encode(map[string]any{"position": 123.5, "bucket_id": b["bucket_id"]})
@@ -299,7 +305,7 @@ func (f *fakeCRUD) handler(w http.ResponseWriter, r *http.Request) {
 			out = append(out, pr)
 		}
 		json.NewEncoder(w).Encode(out)
-	case path == "/api/v2/projects" && r.Method == http.MethodPut:
+	case path == "/api/v2/projects" && r.Method == http.MethodPost:
 		var b map[string]any
 		json.NewDecoder(r.Body).Decode(&b)
 		f.nextProjID++
@@ -328,7 +334,7 @@ func (f *fakeCRUD) handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		json.NewEncoder(w).Encode(pr)
-	case strings.HasPrefix(path, "/api/v2/projects/") && r.Method == http.MethodPost && !strings.Contains(path, "/views"):
+	case strings.HasPrefix(path, "/api/v2/projects/") && r.Method == http.MethodPut && !strings.Contains(path, "/tasks") && !strings.Contains(path, "/views") && !strings.Contains(path, "/teams") && !strings.Contains(path, "/users") && !strings.Contains(path, "/buckets"):
 		var pid int
 		fmt.Sscanf(path, "/api/v2/projects/%d", &pid)
 		pr, ok := f.projects[pid]
@@ -348,7 +354,7 @@ func (f *fakeCRUD) handler(w http.ResponseWriter, r *http.Request) {
 			pr["is_archived"] = a
 		}
 		json.NewEncoder(w).Encode(pr)
-	case strings.Contains(path, "/teams") && strings.HasPrefix(path, "/api/v2/projects/") && r.Method == http.MethodPut:
+	case strings.Contains(path, "/teams") && strings.HasPrefix(path, "/api/v2/projects/") && r.Method == http.MethodPost:
 		var pid int
 		fmt.Sscanf(path, "/api/v2/projects/%d/teams", &pid)
 		var b map[string]any
@@ -385,34 +391,43 @@ func (f *fakeCRUD) handler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]any{"ok": true})
 	case strings.HasPrefix(path, "/api/v2/projects/") && strings.HasSuffix(path, "/views") && r.Method == http.MethodGet:
+		if r.URL.Query().Get("page") != "" && r.URL.Query().Get("page") != "1" {
+			json.NewEncoder(w).Encode([]any{})
+			return
+		}
 		json.NewEncoder(w).Encode([]map[string]any{
 			{"id": float64(39), "title": "List", "view_kind": "list"},
 			{"id": float64(40), "title": "Kanban", "view_kind": "kanban", "done_bucket_id": float64(0)},
 		})
-	case strings.HasPrefix(path, "/api/v2/projects/") && strings.HasSuffix(path, "/views") && r.Method == http.MethodPut:
+	case strings.HasPrefix(path, "/api/v2/projects/") && strings.HasSuffix(path, "/views") && r.Method == http.MethodPost:
 		var b map[string]any
 		json.NewDecoder(r.Body).Decode(&b)
 		json.NewEncoder(w).Encode(map[string]any{"id": float64(40), "title": b["title"], "view_kind": "kanban"})
 	case strings.HasPrefix(path, "/api/v2/projects/") && strings.HasSuffix(path, "/buckets") && r.Method == http.MethodGet:
+		if p := r.URL.Query().Get("page"); p != "" && p != "1" {
+			json.NewEncoder(w).Encode([]any{})
+			return
+		}
 		json.NewEncoder(w).Encode([]map[string]any{
 			{"id": float64(41), "title": "To-Do", "position": float64(1000)},
 			{"id": float64(42), "title": "Done", "position": float64(2000)},
 		})
-	case strings.HasPrefix(path, "/api/v2/projects/") && strings.HasSuffix(path, "/buckets") && r.Method == http.MethodPut:
+	case strings.HasPrefix(path, "/api/v2/projects/") && strings.HasSuffix(path, "/buckets") && r.Method == http.MethodPost:
 		var b map[string]any
 		json.NewDecoder(r.Body).Decode(&b)
 		json.NewEncoder(w).Encode(map[string]any{"id": float64(41), "title": b["title"], "position": b["position"], "limit": b["limit"]})
-	case strings.HasSuffix(path, "/views/40") && r.Method == http.MethodPost:
+	case strings.HasSuffix(path, "/views/40") && r.Method == http.MethodPut:
 		json.NewEncoder(w).Encode(map[string]any{"ok": true})
 	case strings.Contains(path, "/buckets/") && r.Method == http.MethodDelete:
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]any{"ok": true})
 	case strings.Contains(path, "/views/") && strings.HasSuffix(path, "/tasks") && r.Method == http.MethodGet && strings.Count(path, "/") == 7:
-		json.NewEncoder(w).Encode([]map[string]any{
-			{"id": float64(41), "title": "todo", "position": float64(1000), "tasks": f.viewTasks},
-			{"id": float64(42), "title": "done", "position": float64(2000), "tasks": []any{}},
-		})
-	case strings.Contains(path, "/buckets/") && strings.HasSuffix(path, "/tasks") && r.Method == http.MethodPost:
+		if p := r.URL.Query().Get("page"); p != "" && p != "1" {
+			json.NewEncoder(w).Encode([]any{})
+			return
+		}
+		json.NewEncoder(w).Encode(f.viewTasks)
+	case strings.Contains(path, "/buckets/") && strings.HasSuffix(path, "/tasks") && r.Method == http.MethodPut:
 		var b map[string]any
 		json.NewDecoder(r.Body).Decode(&b)
 		f.moves = append(f.moves, b)
@@ -426,14 +441,14 @@ func (f *fakeCRUD) handler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		json.NewEncoder(w).Encode(out)
-	case path == "/api/v2/teams" && r.Method == http.MethodPut:
+	case path == "/api/v2/teams" && r.Method == http.MethodPost:
 		var b map[string]any
 		json.NewDecoder(r.Body).Decode(&b)
 		f.teamsFake.next++
 		created := map[string]any{"id": float64(f.teamsFake.next), "name": b["name"], "description": b["description"], "members": []any{}}
 		f.teamsFake.teams[f.teamsFake.next] = created
 		json.NewEncoder(w).Encode(created)
-	case strings.HasPrefix(path, "/api/v2/teams/") && strings.HasSuffix(path, "/members") && r.Method == http.MethodPut:
+	case strings.HasPrefix(path, "/api/v2/teams/") && strings.HasSuffix(path, "/members") && r.Method == http.MethodPost:
 		var tid int
 		fmt.Sscanf(path, "/api/v2/teams/%d", &tid)
 		tm, ok := f.teamsFake.teams[tid]
@@ -481,7 +496,7 @@ func (f *fakeCRUD) handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		json.NewEncoder(w).Encode(tm)
-	case strings.HasPrefix(path, "/api/v2/teams/") && r.Method == http.MethodPost && !strings.Contains(path, "/members"):
+	case strings.HasPrefix(path, "/api/v2/teams/") && r.Method == http.MethodPut && !strings.Contains(path, "/members"):
 		var tid int
 		fmt.Sscanf(path, "/api/v2/teams/%d", &tid)
 		tm, ok := f.teamsFake.teams[tid]
@@ -504,12 +519,16 @@ func (f *fakeCRUD) handler(w http.ResponseWriter, r *http.Request) {
 		delete(f.teamsFake.teams, tid)
 		json.NewEncoder(w).Encode(map[string]any{"message": "deleted"})
 	case path == "/api/v2/labels" && r.Method == http.MethodGet:
+		if p := r.URL.Query().Get("page"); p != "" && p != "1" {
+			json.NewEncoder(w).Encode([]any{})
+			return
+		}
 		out := []map[string]any{}
 		for _, l := range f.labels {
 			out = append(out, l)
 		}
 		json.NewEncoder(w).Encode(out)
-	case path == "/api/v2/labels" && r.Method == http.MethodPut:
+	case path == "/api/v2/labels" && r.Method == http.MethodPost:
 		var b map[string]any
 		json.NewDecoder(r.Body).Decode(&b)
 		f.nextLabel++
