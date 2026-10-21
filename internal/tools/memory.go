@@ -78,14 +78,12 @@ func handleMemorySearch(r *Registry) mcp.ToolHandlerFor[MemorySearchIn, any] {
 		if !ok {
 			return nil, notConfigured(in.Instance), nil
 		}
-		searcher, err := memory.NewSearcher(cfg, memory.NewOllama(cfg.OllamaURL), memory.NewQdrant(cfg.QdrantURL))
+		searcher, err := memory.NewSearcher(cfg.WithDefaults(), memory.NewOllama(cfg.OllamaURL), memory.NewQdrant(cfg.QdrantURL))
 		if err != nil {
 			return nil, nil, err
 		}
 		opts := memory.SearchOpts{ProjectID: int64(in.ProjectID), K: in.K}
-		for _, l := range splitCSV(in.Labels) {
-			opts.Labels = append(opts.Labels, l)
-		}
+		opts.Labels = append(opts.Labels, splitCSV(in.Labels)...)
 		hits, err := searcher.Search(ctx, in.Query, opts)
 		if err != nil {
 			if row := degrade(err); row != nil {
@@ -108,6 +106,7 @@ func handleMemoryStatus(r *Registry) mcp.ToolHandlerFor[MemoryStatusIn, any] {
 		if !ok {
 			return nil, notConfigured(in.Instance), nil
 		}
+		cfg = cfg.WithDefaults()
 		instance := cfg.Instance
 		if instance == "" {
 			instance = "default"

@@ -33,9 +33,9 @@ type Entry struct {
 
 // Store is the on-disk shadow queue for one tracker instance.
 type Store struct {
-	root      string // <root>/<instance>
-	mu        sync.Mutex
-	nextSeq   int64
+	root       string // <root>/<instance>
+	mu         sync.Mutex
+	nextSeq    int64
 	nextShadow int64
 }
 

@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -55,7 +54,6 @@ func (e *fakeEmbedder) Embed(ctx context.Context, model string, texts []string) 
 }
 
 type fakeStore struct {
-	mu         sync.Mutex
 	exists     bool
 	points     map[uint64]map[string]any
 	upserts    int
@@ -157,7 +155,8 @@ func TestChunkTask(t *testing.T) {
 // --- point id determinism ---
 
 func TestPointIDStable(t *testing.T) {
-	if pointID("inst", "task-44") != pointID("inst", "task-44") {
+	ids := []uint64{pointID("inst", "task-44"), pointID("inst", "task-44")}
+	if ids[0] != ids[1] {
 		t.Fatal("point id must be deterministic")
 	}
 	if pointID("a", "task-44") == pointID("b", "task-44") {

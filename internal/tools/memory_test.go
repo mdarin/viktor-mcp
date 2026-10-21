@@ -17,6 +17,11 @@ import (
 func newMemoryFixture(t *testing.T, qdrantUp, ollamaUp bool) *mcp.ClientSession {
 	t.Helper()
 
+	// Isolate the sync-state file (XDG_STATE_HOME): without this the
+	// memory_status test reads the developer's real state and reports
+	// "ok" instead of "not synced yet".
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+
 	// Fake Qdrant: one collection with two points (open task, closed
 	// task, commit chunk) searchable by score order.
 	mux := http.NewServeMux()

@@ -54,7 +54,7 @@ func (g *GitClient) Commits(ctx context.Context, taskID int64) ([]CommitInfo, er
 		"--pretty=format:%H",
 		"--name-only",
 	}
-	cmd := exec.CommandContext(ctx, bin, args...)
+	cmd := exec.CommandContext(ctx, bin, args...) // #nosec G204 -- bin comes from trusted config/env
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("memory: git log: %w", err)

@@ -69,7 +69,7 @@ func (s *ShadowSource) Name() string { return "shadow-mirror" }
 
 // AllTasks implements TaskSource by loading every task snapshot from
 // every mirrored project.
-func (s *ShadowSource) AllTasks(ctx context.Context) ([]Task, error) {
+func (s *ShadowSource) AllTasks(_ context.Context) ([]Task, error) {
 	var out []Task
 	for _, ref := range s.store.Projects() {
 		for _, snap := range s.store.TasksOfProject(ref) {
@@ -93,7 +93,7 @@ func (s *ShadowSource) AllTasks(ctx context.Context) ([]Task, error) {
 }
 
 // Comments implements TaskSource: the mirror holds no comments.
-func (s *ShadowSource) Comments(ctx context.Context, taskID int64) ([]Comment, error) {
+func (s *ShadowSource) Comments(_ context.Context, _ int64) ([]Comment, error) {
 	return nil, nil
 }
 

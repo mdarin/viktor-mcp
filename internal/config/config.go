@@ -36,8 +36,9 @@ type MemorySection struct {
 	GitEnrich map[string]string
 }
 
-// Nil-safe accessors: a nil section means "memory not configured" and
-// yields empty values, letting callers chain config → env → defaults.
+// Qdrant returns the Qdrant URL of the memory section; a nil section
+// means "memory not configured" and yields empty values, letting callers
+// chain config → env → defaults.
 func (m *MemorySection) Qdrant() string {
 	if m == nil {
 		return ""

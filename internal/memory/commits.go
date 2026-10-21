@@ -64,7 +64,7 @@ func (g *GitClient) AllCommits(ctx context.Context) ([]CommitRecord, error) {
 		"--pretty=format:%H%x1f%an%x1f%aI%x1f%s%x1e",
 		"--name-only",
 	}
-	cmd := exec.CommandContext(ctx, bin, args...)
+	cmd := exec.CommandContext(ctx, bin, args...) // #nosec G204 -- bin comes from trusted config/env
 	out, err := cmd.Output()
 	if err != nil {
 		// A repo with no commits yet exits 128 ("does not have any commits").
