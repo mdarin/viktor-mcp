@@ -53,6 +53,10 @@ func main() {
 	// (bot identity, card #616); CLI subcommands load it themselves.
 	loadDotenv(".env")
 	if err := server.Run(ctx, os.Stderr); err != nil {
+		// Fail fast with the reason on stderr (card #839): an
+		// exit code alone made config errors look like silent
+		// tool outages to the MCP host.
+		fmt.Fprintln(os.Stderr, "viktor:", err)
 		os.Exit(1)
 	}
 }

@@ -295,9 +295,27 @@ func readFile(path string) (*fileConfig, bool, error) {
 	}
 	var fc fileConfig
 	if err := json.Unmarshal(data, &fc); err != nil {
-		return nil, true, fmt.Errorf("invalid JSON: %w", err)
+		return nil, true, friendlyJSON(err)
 	}
 	return &fc, true, nil
+}
+
+// friendlyJSON rewrites encoding/json type errors into actionable
+// messages: a bare "cannot unmarshal number into Go struct field
+// fileRepowiseIn.repowise.timeout of type string" names neither the
+// config file nor the fix. The known trap (card #839) is a duration
+// written as a number ("timeout": 90) — durations must be strings
+// like "90s".
+func friendlyJSON(err error) error {
+	var te *json.UnmarshalTypeError
+	if !errors.As(err, &te) {
+		return fmt.Errorf("invalid JSON: %w", err)
+	}
+	expected := te.Type.Kind().String()
+	if strings.HasSuffix(strings.ToLower(te.Field), "timeout") {
+		expected = `duration string (e.g. "90s")`
+	}
+	return fmt.Errorf("field %q: expected %s, got %s", te.Field, expected, te.Value)
 }
 
 func (c *Config) applyFile(fc *fileConfig) error {
@@ -312,7 +330,7 @@ func (c *Config) applyFile(fc *fileConfig) error {
 		if fi.Timeout != "" {
 			d, err := time.ParseDuration(fi.Timeout)
 			if err != nil {
-				return fmt.Errorf("instance %q: timeout: %w", name, err)
+				return fmt.Errorf("instance %q: timeout: %w (durations are strings like \"90s\")", name, err)
 			}
 			inst.Timeout = d
 		}
@@ -336,7 +354,7 @@ func (c *Config) applyFile(fc *fileConfig) error {
 		if t := strings.TrimSpace(fc.Repowise.Timeout); t != "" {
 			d, err := time.ParseDuration(t)
 			if err != nil {
-				return fmt.Errorf("repowise: timeout: %w", err)
+				return fmt.Errorf("repowise: timeout: %w (durations are strings like \"90s\")", err)
 			}
 			rw.Timeout = d
 		}

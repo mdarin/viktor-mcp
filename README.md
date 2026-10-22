@@ -172,6 +172,24 @@ Env-сокращение `VIKTOR_BOT_NAME`/`VIKTOR_BOT_TOKEN` (алиасы
 сервер предупреждает в stderr при старте. Токены никогда не попадают в логи;
 `instance_list` возвращает только факт наличия токена (`token_set`).
 
+### Типовые ошибки конфигурации (card #839)
+
+Невалидный конфиг валидируется при старте: сервер печатает точное имя
+поля и ожидаемый тип в stderr и завершается с exit 1. Частые ловушки:
+
+1. **Длительность как число.** Все timeout'ы (`instances.*.timeout`,
+   `repowise.timeout`, env `VIKUNJA_TIMEOUT`) — строки-дюрации:
+   `"timeout": "90s"`, а не `"timeout": 90`. Ошибка:
+   `field "repowise.timeout": expected duration string (e.g. "90s"), got number`.
+2. **Число в строковом поле** (например, `memory.qdrant_url: 123`):
+   `field "memory.qdrant_url": expected string, got number`.
+3. **Dim mismatch памяти**: модель эмбеддинга (`memory.embed_model`)
+   даёт иную размерность, чем существующая Qdrant-коллекция — sync
+   падает на старте с внятной ошибкой (см. `memory --status`), точек
+   индекс не трогает.
+4. **Скрытые soft-delete**: удалённые задачи Vikunja скрывает из API,
+   но ghost-чанки остаются в индексе до `memory sync -full`.
+
 ## Подключение как MCP-сервер
 
 Пример для [opencode](https://opencode.ai) (`~/.config/opencode/opencode.json`):

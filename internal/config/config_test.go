@@ -139,6 +139,55 @@ func TestLoadBadRateLimit(t *testing.T) {
 	}
 }
 
+// Card #839: every config type mismatch must fail fast with the exact
+// field name and expected type — a raw encoding/json message names Go
+// internals and the server exits silently.
+func writeCfg(t *testing.T, content string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestLoadTimeoutNumberIsActionable(t *testing.T) {
+	path := writeCfg(t, `{"repowise": {"timeout": 90}}`)
+	_, err := load(env("VIKUNJA_URL=http://x", "VIKUNJA_TOKEN=tk"), path, nil)
+	if err == nil {
+		t.Fatal("want error for numeric repowise.timeout")
+	}
+	for _, want := range []string{`"repowise.timeout"`, `duration string`, `"90s"`, `number`} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q missing %q", err, want)
+		}
+	}
+}
+
+func TestLoadInstanceTimeoutNumberNamesField(t *testing.T) {
+	path := writeCfg(t, `{"instances": {"default": {"url": "http://x", "token": "tk", "timeout": 5}}}`)
+	_, err := load(env(), path, nil)
+	if err == nil || !strings.Contains(err.Error(), `"instances.default.timeout"`) {
+		t.Errorf("want field-named error, got %v", err)
+	}
+}
+
+func TestLoadWrongTypeNonTimeoutField(t *testing.T) {
+	path := writeCfg(t, `{"memory": {"qdrant_url": 123}}`)
+	_, err := load(env("VIKUNJA_URL=http://x", "VIKUNJA_TOKEN=tk"), path, nil)
+	if err == nil || !strings.Contains(err.Error(), `"memory.qdrant_url"`) || !strings.Contains(err.Error(), `got number`) {
+		t.Errorf("want field-named type error, got %v", err)
+	}
+}
+
+func TestLoadBadDurationValueHasHint(t *testing.T) {
+	path := writeCfg(t, `{"repowise": {"timeout": "tomorrow"}}`)
+	_, err := load(env("VIKUNJA_URL=http://x", "VIKUNJA_TOKEN=tk"), path, nil)
+	if err == nil || !strings.Contains(err.Error(), `repowise: timeout:`) || !strings.Contains(err.Error(), `"90s"`) {
+		t.Errorf("want duration hint, got %v", err)
+	}
+}
+
 func TestLoadDefaultInstanceFromEnv(t *testing.T) {
 	cfg, err := load(env(
 		"VIKUNJA_URL=http://main", "VIKUNJA_TOKEN=tk_main",
