@@ -282,6 +282,40 @@ func TestEnsureAnchorsIdempotent(t *testing.T) {
 	}
 }
 
+func TestEnsureAnchorsShrinkDeletesOrphans(t *testing.T) {
+	dim := 8
+	store := &fakeStore{exists: true}
+	v, _ := newTestVerifier(t, &fakeEmbedder{dim: dim}, store, "")
+	ctx := context.Background()
+	big := make([]string, maxAnchors)
+	for i := range big {
+		big[i] = fmt.Sprintf("anchor line %d", i)
+	}
+	if _, err := v.ensureAnchorsVecs(ctx, 501, big); err != nil {
+		t.Fatal(err)
+	}
+	if n := countAnchors(store, 501); n != maxAnchors {
+		t.Fatalf("after big run: %d anchors, want %d", n, maxAnchors)
+	}
+	small := []string{"Fix the login", "validate email"}
+	if _, err := v.ensureAnchorsVecs(ctx, 501, small); err != nil {
+		t.Fatal(err)
+	}
+	if n := countAnchors(store, 501); n != len(small) {
+		t.Fatalf("after shrink: %d anchors left, want %d (orphans not deleted)", n, len(small))
+	}
+}
+
+func countAnchors(store *fakeStore, taskID int) int {
+	n := 0
+	for _, p := range store.points {
+		if p.Payload["chunk_type"] == "anchor" && p.Payload["task_id"] == taskID {
+			n++
+		}
+	}
+	return n
+}
+
 func TestGracefulDegradationEmbedderDown(t *testing.T) {
 	v, _ := newTestVerifier(t, &fakeEmbedder{fail: true}, &fakeStore{}, "diff")
 	if _, err := v.Verify(context.Background(), 501, "diff"); err == nil {

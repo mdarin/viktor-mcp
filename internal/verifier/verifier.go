@@ -188,7 +188,10 @@ func (v *Verifier) ensureAnchorsVecs(ctx context.Context, taskID int, anchors []
 		}
 	}
 	ids := anchorIDs(v.Cfg.Instance, taskID, len(anchors))
-	if err := v.Store.DeletePoints(ctx, v.Cfg.Collection, ids); err != nil {
+	// Delete the full deterministic id range, not just len(anchors): a
+	// previous run may have stored more anchors (comment count changed,
+	// cap 24), leaving orphans beyond the current count.
+	if err := v.Store.DeletePoints(ctx, v.Cfg.Collection, anchorIDs(v.Cfg.Instance, taskID, maxAnchors)); err != nil {
 		return 0, fmt.Errorf("verifier: delete stale anchors: %w", err)
 	}
 	points := make([]memory.Point, 0, len(anchors))
