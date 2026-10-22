@@ -79,10 +79,12 @@ func runMemory(ctx context.Context, args []string) error {
 	status := fs.Bool("status", false, "print index status and exit")
 	doctor := fs.Bool("doctor", false, "sweep the collection for orphan points and print a report (card #837)")
 	prune := fs.Bool("prune", false, "with -doctor: delete the orphan points found (default: dry run)")
+	watch := fs.Bool("watch", false, "keep running: a full rescan (ghost cleanup) every -interval")
+	interval := fs.Duration("interval", 24*time.Hour, "with -watch: time between full rescans")
 	// Strip a leading subcommand so flags after it still parse:
 	// `viktor memory sync -full` (Go's flag stops at the first
 	// positional argument).
-	if len(args) > 0 && (args[0] == "sync" || args[0] == "status" || args[0] == "doctor") {
+	if len(args) > 0 && (args[0] == "sync" || args[0] == "status" || args[0] == "doctor" || args[0] == "watch") {
 		switch args[0] {
 		case "sync":
 			*sync = true
@@ -90,6 +92,8 @@ func runMemory(ctx context.Context, args []string) error {
 			*status = true
 		case "doctor":
 			*doctor = true
+		case "watch":
+			*watch = true
 		}
 		args = args[1:]
 	}
@@ -99,8 +103,8 @@ func runMemory(ctx context.Context, args []string) error {
 	if fs.NArg() > 0 {
 		return fmt.Errorf("unknown memory command %q", fs.Arg(0))
 	}
-	if !*sync && !*status && !*doctor {
-		return fmt.Errorf("usage: viktor memory sync|status|doctor [-full] [-prune] [-instance NAME] [-repo PATH]")
+	if !*sync && !*status && !*doctor && !*watch {
+		return fmt.Errorf("usage: viktor memory sync|status|doctor|watch [-full] [-prune] [-interval DUR] [-instance NAME] [-repo PATH]")
 	}
 
 	cfg, err := config.Load()
@@ -155,6 +159,7 @@ func runMemory(ctx context.Context, args []string) error {
 		Collection:   pick("collection", "VIKTOR_MEMORY_COLLECTION", memSection.Coll()),
 		QdrantAPIKey: pick("apikey", "VIKTOR_MEMORY_QDRANT_API_KEY", memSection.QdrantKey()),
 		GitRepo:      pick("repo", "VIKTOR_MEMORY_GIT_REPO", memSection.RepoFor(instName)),
+		FullSyncMaxAge: time.Duration(memSection.FullSyncHoursOrDefault()) * time.Hour,
 	}
 	if memCfg.GitRepo == "" {
 		// "Index the current repository": repo history joins the board
@@ -196,6 +201,26 @@ func runMemory(ctx context.Context, args []string) error {
 			return err
 		}
 		return printJSON(rep)
+	}
+
+	if *watch {
+		// Periodic ghost cleanup (card #836): Vikunja hides soft-deleted
+		// tasks from the API, so only a complete rescan can drop their
+		// points. Each tick is a full rescan; reports go to stdout.
+		for {
+			rep, err := ix.SyncFull(ctx)
+			if err != nil {
+				return err
+			}
+			if err := printJSON(rep); err != nil {
+				return err
+			}
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-time.After(*interval):
+			}
+		}
 	}
 
 	var rep *memory.Report

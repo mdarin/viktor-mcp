@@ -10,6 +10,7 @@ package memory
 
 import (
 	"fmt"
+	"time"
 )
 
 // Config holds the memory layer settings for one tracker instance.
@@ -23,6 +24,9 @@ type Config struct {
 	// instances; empty = no header.
 	QdrantAPIKey string
 	GitRepo      string // optional per-instance repo path for commit enrichment
+	// FullSyncMaxAge is how long a full rescan may be overdue before
+	// status reports the index as stale (card #836). 0 → 24h.
+	FullSyncMaxAge time.Duration
 }
 
 func (c *Config) normalize() {
@@ -40,6 +44,9 @@ func (c *Config) normalize() {
 	}
 	if c.Instance == "" {
 		c.Instance = "default"
+	}
+	if c.FullSyncMaxAge <= 0 {
+		c.FullSyncMaxAge = 24 * time.Hour
 	}
 }
 

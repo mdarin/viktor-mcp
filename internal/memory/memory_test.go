@@ -874,3 +874,70 @@ func TestDoctorEmptyCollection(t *testing.T) {
 		t.Fatalf("empty: %+v", rep)
 	}
 }
+
+// --- full-sync cadence / status age (card #836) ---
+
+func TestSyncFullRecordsLastFullSync(t *testing.T) {
+	st := newFakeStore()
+	src := &fakeSource{tasks: []Task{{ID: 1, Title: "x"}}}
+	ix, sp := newTestIndexer(t, src, &fakeEmbedder{dim: 4}, st, nil)
+	if _, err := ix.SyncFull(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(sp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "last_full_sync") {
+		t.Fatalf("state must record last_full_sync: %s", raw)
+	}
+	s, err := ix.Status(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.LastFullSync == "" || s.FullSyncAge == "" || s.FullSyncStale {
+		t.Fatalf("status after fresh full sync: %+v", s)
+	}
+}
+
+func TestStatusStaleWhenFullSyncOverdue(t *testing.T) {
+	st := newFakeStore()
+	st.points[1] = map[string]any{"task_id": float64(1), "chunk_type": "task"}
+	src := &fakeSource{tasks: []Task{{ID: 1, Title: "x"}}}
+	dir := t.TempDir()
+	sp := filepath.Join(dir, "sync.json")
+	ix, err := NewIndexer(Config{Instance: "test", FullSyncMaxAge: time.Hour}, src, &fakeEmbedder{dim: 4}, st, nil, sp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ix.SyncFull(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	// Backdate the in-memory full-sync record beyond the max age
+	// (status reads the live state, not the file).
+	ix.state.LastFullSync = time.Now().Add(-2 * time.Hour).UTC().Format(time.RFC3339)
+	s, err := ix.Status(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !s.FullSyncStale {
+		t.Fatalf("status must flag overdue full sync: %+v", s)
+	}
+}
+
+func TestStatusNoFullSyncWithPointsIsStale(t *testing.T) {
+	st := newFakeStore()
+	st.points[1] = map[string]any{"task_id": float64(9), "chunk_type": "task"} // ghost
+	src := &fakeSource{}                                                       // task 9 is gone from the tracker — its point is a ghost
+	ix, _ := newTestIndexer(t, src, &fakeEmbedder{}, st, nil)
+	s, err := ix.Status(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.LastFullSync != "" || !s.FullSyncStale {
+		t.Fatalf("points without full-sync record must be stale: %+v", s)
+	}
+	if s.Ghosts != 1 {
+		t.Fatalf("status must report doctor ghost count, got %d", s.Ghosts)
+	}
+}

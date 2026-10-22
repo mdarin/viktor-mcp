@@ -10,8 +10,12 @@ import (
 // timestamp seen and per-chunk content hashes used for idempotent syncs
 // (unchanged chunks produce zero upserts).
 type syncState struct {
-	Cursor string            `json:"cursor,omitempty"`
-	Hashes map[string]string `json:"hashes"` // chunk key -> hash(text)
+	Cursor string `json:"cursor,omitempty"`
+	// LastFullSync (RFC3339) is the last time a scan ran that could see
+	// deletions (a complete batch) — the ghost-cleanup reference age
+	// surfaced by status (card #836).
+	LastFullSync string            `json:"last_full_sync,omitempty"`
+	Hashes       map[string]string `json:"hashes"` // chunk key -> hash(text)
 }
 
 func loadState(path string) (*syncState, error) {

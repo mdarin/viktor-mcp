@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // Report summarizes one sync run.
@@ -223,6 +224,11 @@ func (ix *Indexer) sync(ctx context.Context, full bool) (*Report, error) {
 	report.ChunksTotal = len(seenKeys)
 	report.Cursor = cursor
 	ix.state.Cursor = cursor
+	if batch.Complete {
+		// A complete scan is the only pass that could see deletions —
+		// remember when ghost cleanup last ran (card #836).
+		ix.state.LastFullSync = time.Now().UTC().Format(time.RFC3339)
+	}
 
 	// Only persist state after every remote write succeeded, so a failed
 	// sync retries the same upserts next run.
@@ -298,6 +304,13 @@ type Status struct {
 	State         string `json:"state"`
 	CollectionDim int    `json:"collection_dim,omitempty"` // 0 = no collection
 	DimVerdict    string `json:"dim_verdict,omitempty"`    // ok | mismatch | unknown
+	// Ghost-cleanup bookkeeping (card #836): when the last deletion-
+	// capable (complete) scan ran, its age, whether it is overdue, and
+	// the orphan count a doctor sweep reports right now.
+	LastFullSync  string `json:"last_full_sync,omitempty"`
+	FullSyncAge   string `json:"full_sync_age,omitempty"`  // "" = never
+	FullSyncStale bool   `json:"full_sync_stale"`
+	Ghosts        int    `json:"ghosts"` // -1 = unknown (sweep failed)
 }
 
 // Status reads the current index state. When the collection exists, it
@@ -320,6 +333,24 @@ func (ix *Indexer) Status(ctx context.Context) (*Status, error) {
 	}
 	if st.Cursor == "" && len(ix.state.Hashes) == 0 {
 		st.State = "not synced yet"
+	}
+	// Ghost-cleanup age (card #836): a complete scan is the only pass
+	// that can delete points of soft-deleted tasks.
+	st.Ghosts = -1
+	if t, err := time.Parse(time.RFC3339, ix.state.LastFullSync); err == nil && !t.IsZero() {
+		st.LastFullSync = ix.state.LastFullSync
+		age := time.Since(t)
+		st.FullSyncAge = age.Truncate(time.Minute).String()
+		st.FullSyncStale = age > ix.cfg.FullSyncMaxAge
+	} else if st.Points > 0 {
+		st.FullSyncStale = true // points exist, no full scan on record
+	}
+	if st.Points > 0 {
+		if rep, err := ix.Doctor(ctx, false); err == nil {
+			st.Ghosts = rep.OrphanPoints
+		}
+	} else if st.State == "ok" {
+		st.Ghosts = 0 // empty collection — nothing to sweep
 	}
 	dim, found, err := ix.store.CollectionDim(ctx, ix.cfg.Collection)
 	if err != nil || !found {

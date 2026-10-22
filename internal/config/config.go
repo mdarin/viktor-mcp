@@ -52,6 +52,11 @@ type MemorySection struct {
 	// QdrantAPIKey enables the `api-key` header for secured Qdrant
 	// instances (Helm chart service_api_key). Empty = no header.
 	QdrantAPIKey string
+	// FullSyncHours is how often a full rescan (the only pass that can
+	// see soft-deleted tasks) should run; 0 → built-in default of 24h
+	// (card #836: Vikunja has no deleted_at filter, ghosts die on the
+	// periodic full sync).
+	FullSyncHours int
 	// GitEnrich maps instance name → path to the git repo whose commit
 	// history enriches that instance's task memory. Per-instance by
 	// design: multi-instance setups track different repos.
@@ -102,6 +107,15 @@ func (m *MemorySection) RepoFor(instance string) string {
 		return ""
 	}
 	return m.GitEnrich[instance]
+}
+
+// FullSyncHoursOrDefault returns the configured full-sync cadence in
+// hours; a nil section or 0 means the built-in default of 24.
+func (m *MemorySection) FullSyncHoursOrDefault() int {
+	if m == nil || m.FullSyncHours <= 0 {
+		return 24
+	}
+	return m.FullSyncHours
 }
 
 // RepowiseSection enables the optional repowise change-risk digest in
@@ -204,12 +218,15 @@ type fileRepowiseIn struct {
 }
 
 type fileMemoryIn struct {
-	QdrantURL  string            `json:"qdrant_url"`
-	OllamaURL  string            `json:"ollama_url"`
-	EmbedModel string            `json:"embed_model"`
-	Collection string            `json:"collection"`
-	QdrantAPIKey string          `json:"qdrant_api_key"`
-	GitEnrich  map[string]string `json:"git_enrich"`
+	QdrantURL    string `json:"qdrant_url"`
+	OllamaURL    string `json:"ollama_url"`
+	EmbedModel   string `json:"embed_model"`
+	Collection   string `json:"collection"`
+	QdrantAPIKey string `json:"qdrant_api_key"`
+	// FullSyncHours paces the periodic full rescan (ghost cleanup);
+	// number of hours, 0 = default (24).
+	FullSyncHours int               `json:"full_sync_hours"`
+	GitEnrich     map[string]string `json:"git_enrich"`
 }
 
 type fileInstanceIn struct {
