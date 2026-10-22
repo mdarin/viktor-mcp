@@ -51,8 +51,14 @@ func TestGoldenSnapshot(t *testing.T) {
 	registry := NewRegistry(srv, nil)
 	registry.RegisterAll()
 
-	if got := len(registry.Names()); got != expectedToolCount {
-		t.Errorf("registered %d tools, want %d", got, expectedToolCount)
+	// Counter assertions run only in check mode: during -update-snapshot
+	// the golden.json is being regenerated, and the hardcoded counters
+	// are synced afterwards by scripts/surface_update.py (make
+	// surface-update).
+	if !*updateSnapshot {
+		if got := len(registry.Names()); got != expectedToolCount {
+			t.Errorf("registered %d tools, want %d", got, expectedToolCount)
+		}
 	}
 
 	surface := listSurface(t, srv)
@@ -67,7 +73,7 @@ func TestGoldenSnapshot(t *testing.T) {
 	for _, tl := range parsed {
 		names = append(names, tl.Name)
 	}
-	if len(names) != expectedToolCount {
+	if !*updateSnapshot && len(names) != expectedToolCount {
 		t.Errorf("tools/list returned %d tools, want %d", len(names), expectedToolCount)
 	}
 

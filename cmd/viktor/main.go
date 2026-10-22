@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"regexp"
 	"strings"
 	"syscall"
 
@@ -276,6 +277,22 @@ func hasMemoryEnv() bool {
 // loadDotenv applies KEY=VALUE pairs from a .env file to the environment
 // without overriding variables that are already set. Malformed lines are
 // skipped; this is a convenience, not a config parser.
+// envRef matches ${VAR} and ${VAR:-default} references; default may be
+// empty (${VAR:-} means "unset VAR becomes empty string").
+var envRef = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}`)
+
+// expandEnv resolves ${VAR} references: an already-set environment
+// variable wins (env before file), otherwise the :- default applies.
+func expandEnv(v string) string {
+	return envRef.ReplaceAllStringFunc(v, func(m string) string {
+		sub := envRef.FindStringSubmatch(m)
+		if val := os.Getenv(sub[1]); val != "" {
+			return val
+		}
+		return sub[2]
+	})
+}
+
 func loadDotenv(path string) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -286,20 +303,30 @@ func loadDotenv(path string) {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
+		// Shell-style "export K=V" is accepted; the prefix is dropped.
+		line = strings.TrimPrefix(line, "export ")
 		k, v, ok := strings.Cut(line, "=")
 		if !ok {
 			continue
 		}
 		k = strings.TrimSpace(k)
 		v = strings.TrimSpace(v)
-		// Unquoted values may carry an inline comment; a quoted value
-		// keeps everything up to the closing quote.
-		if len(v) >= 2 && (v[0] == '"' || v[0] == '\'') && v[len(v)-1] == v[0] {
+		// Unquoted values may carry an inline comment; a double-quoted
+		// value keeps everything up to the closing quote and gets ${VAR}
+		// expansion; a single-quoted value stays literal (no expansion).
+		expand := true
+		if len(v) >= 2 && v[0] == '\'' && v[len(v)-1] == '\'' {
+			v = v[1 : len(v)-1]
+			expand = false
+		} else if len(v) >= 2 && v[0] == '"' && v[len(v)-1] == '"' {
 			v = v[1 : len(v)-1]
 		} else if i := strings.Index(v, " #"); i >= 0 {
 			v = strings.TrimSpace(v[:i])
 		} else if strings.HasPrefix(v, "#") {
 			continue
+		}
+		if expand {
+			v = expandEnv(v)
 		}
 		if k == "" || os.Getenv(k) != "" {
 			continue
