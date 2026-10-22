@@ -78,14 +78,18 @@ type DiffSource func(ctx context.Context, repo string) (string, error)
 
 // Verdict is the outcome of one verification pass.
 type Verdict struct {
-	TaskID    int     `json:"task_id"`
-	Drift     bool    `json:"drift"`
-	Semantic  float64 `json:"semantic"`
-	Exact     float64 `json:"exact"`
-	TopAnchor string  `json:"top_anchor,omitempty"`
-	Reason    string  `json:"reason"`
-	Anchors   int     `json:"anchors"`
-	ShadowID  string  `json:"shadow_id,omitempty"`
+	TaskID    int         `json:"task_id"`
+	Drift     bool        `json:"drift"`
+	Semantic  float64     `json:"semantic"`
+	Exact     float64     `json:"exact"`
+	TopAnchor string      `json:"top_anchor,omitempty"`
+	Reason    string      `json:"reason"`
+	Anchors   int         `json:"anchors"`
+	ShadowID  string      `json:"shadow_id,omitempty"`
+	// ChangeRisk is the optional repowise digest (card #823); nil when
+	// the repowise section is absent — the output is then byte-identical
+	// to pre-#823.
+	ChangeRisk *RiskDigest `json:"change_risk,omitempty"`
 }
 
 // Verifier checks submitted work against task anchors.
@@ -96,6 +100,9 @@ type Verifier struct {
 	Store    VectorStore
 	Diff     DiffSource
 	Shadow   *shadow.Store
+	// Risk is the optional change-risk runner (card #823); nil when the
+	// repowise config section is absent — feature off, output unchanged.
+	Risk ChangeRisker
 	// Now is overridable in tests.
 	Now func() time.Time
 }
@@ -275,7 +282,9 @@ func (v *Verifier) CleanupAnchors(ctx context.Context, taskID int) error {
 }
 
 // VerifyRepo diffs the repo (uncommitted changes first, then the last
-// commit) and verifies it against the task.
+// commit) and verifies it against the task. When a ChangeRisker is
+// configured (repowise section, card #823), a non-blocking risk digest
+// is appended to the verdict.
 func (v *Verifier) VerifyRepo(ctx context.Context, taskID int, repo string) (Verdict, error) {
 	if v.Diff == nil {
 		return Verdict{TaskID: taskID}, fmt.Errorf("verifier: no diff source configured")
@@ -284,7 +293,14 @@ func (v *Verifier) VerifyRepo(ctx context.Context, taskID int, repo string) (Ver
 	if err != nil {
 		return Verdict{TaskID: taskID}, err
 	}
-	return v.Verify(ctx, taskID, diff)
+	vd, err := v.Verify(ctx, taskID, diff)
+	if err == nil && v.Risk != nil {
+		// Empty revspec mirrors GitDiff semantics: uncommitted work
+		// first, HEAD when the tree is clean — the CLI decides the same
+		// way. The digest never alters the drift fields above.
+		vd.ChangeRisk = v.Risk(ctx, repo, "")
+	}
+	return vd, err
 }
 
 func trimDiff(diff string) string {

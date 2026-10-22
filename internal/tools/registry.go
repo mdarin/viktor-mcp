@@ -13,6 +13,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"viktor/internal/client"
+	"viktor/internal/config"
 	"viktor/internal/memory"
 	"viktor/internal/shadow"
 )
@@ -48,6 +49,9 @@ type Registry struct {
 	lastProbe   atomic.Int64
 
 	memoryCfgs map[string]memory.Config
+	// repowise enables the optional change-risk digest in verify_review
+	// (card #823); nil = feature off.
+	repowise *config.RepowiseSection
 }
 
 func NewRegistry(server *mcp.Server, api *client.Client) *Registry {
@@ -61,6 +65,19 @@ func NewRegistry(server *mcp.Server, api *client.Client) *Registry {
 
 func (r *Registry) SetLogger(l *slog.Logger) {
 	r.logger = l
+}
+
+// SetRepowise installs the optional change-risk config (card #823).
+func (r *Registry) SetRepowise(cfg *config.RepowiseSection) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.repowise = cfg
+}
+
+func (r *Registry) repowiseFor() *config.RepowiseSection {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.repowise
 }
 
 func (r *Registry) SetToolTimeout(d time.Duration) {

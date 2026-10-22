@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 	"strings"
 	"testing"
 
@@ -350,5 +351,118 @@ func TestVerdictJSONShape(t *testing.T) {
 		if !strings.Contains(string(b), key) {
 			t.Fatalf("json missing %s: %s", key, b)
 		}
+	}
+}
+
+// --- optional repowise change-risk digest (card #823) ---
+
+func TestVerifyRepoNoRiskRunnerOutputUnchanged(t *testing.T) {
+	emb := &fakeEmbedder{dim: 4}
+	st := &fakeStore{exists: true}
+	v, _ := newTestVerifier(t, emb, st, "+ exponential backoff added")
+	vd, err := v.VerifyRepo(context.Background(), 501, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if vd.ChangeRisk != nil {
+		t.Fatalf("no repowise section → no digest: %+v", vd.ChangeRisk)
+	}
+	b, err := json.Marshal(vd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), "change_risk") {
+		t.Fatalf("verdict JSON must stay byte-identical without the section: %s", b)
+	}
+}
+
+func TestVerifyRepoAppendsRiskDigest(t *testing.T) {
+	emb := &fakeEmbedder{dim: 4}
+	st := &fakeStore{exists: true}
+	v, _ := newTestVerifier(t, emb, st, "+ exponential backoff added")
+	v.Risk = func(_ context.Context, repo, revspec string) *RiskDigest {
+		return &RiskDigest{
+			Status:         "ok",
+			Revspec:        revspec,
+			RiskPercentile: 85,
+			ReviewPriority: "high",
+			Findings:       []RiskFinding{{ID: "hd_1", Severity: "medium", Summary: "unhandled error"}},
+		}
+	}
+	before, err := v.VerifyRepo(context.Background(), 501, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before.ChangeRisk == nil || before.ChangeRisk.Status != "ok" || before.ChangeRisk.ReviewPriority != "high" {
+		t.Fatalf("digest missing: %+v", before.ChangeRisk)
+	}
+	// The digest must not influence the drift fields: same setup as
+	// TestVerifyDriftQueuesShadowTask, plus the runner.
+	v2, _ := newTestVerifier(t, &fakeEmbedder{dim: 8, vec: map[string][]float32{"irrigation": constVec(8, 0, 0)}}, &fakeStore{}, "refactor the garden irrigation schedule completely unrelated words")
+	v2.Risk = v.Risk
+	after, err := v2.VerifyRepo(context.Background(), 501, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !after.Drift {
+		t.Fatal("digest must not change the drift verdict")
+	}
+	if after.ChangeRisk == nil || after.ChangeRisk.Status != "ok" {
+		t.Fatalf("digest must survive drift verdicts: %+v", after.ChangeRisk)
+	}
+}
+
+// fakeRiskCLI builds an executable shell script masquerading as the
+// repowise binary.
+func fakeRiskCLI(t *testing.T, script string) string {
+	t.Helper()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "repowise")
+	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestRepowiseRunnerParse(t *testing.T) {
+	okJSON := `{"risk_percentile": 85.5, "review_priority": "high", "classification": "Big", "score": 8.5,
+		"health_delta": {"findings": [{"id": "hd_1", "severity": "high", "summary": "bad"}, {"id": "hd_2", "severity": "low", "summary": "meh"}]}}`
+	cli := fakeRiskCLI(t, "echo '"+okJSON+"'")
+	d := RepowiseRunner{CLI: cli, Timeout: 10 * time.Second}.Run(context.Background(), "/tmp/repo", "")
+	if d.Status != "ok" || d.RiskPercentile != 85.5 || d.ReviewPriority != "high" || d.Score != 8.5 {
+		t.Fatalf("parse failed: %+v", d)
+	}
+	if len(d.Findings) != 2 || d.Findings[0].ID != "hd_1" {
+		t.Fatalf("findings: %+v", d.Findings)
+	}
+
+	// CLI returns garbage → unavailable.
+	cli = fakeRiskCLI(t, "echo 'not json at all'")
+	d = RepowiseRunner{CLI: cli, Timeout: 10 * time.Second}.Run(context.Background(), "", "")
+	if d.Status != "unavailable" || d.Note == "" {
+		t.Fatalf("garbage must degrade to unavailable: %+v", d)
+	}
+
+	// CLI exits non-zero (no index) → unavailable with a note.
+	cli = fakeRiskCLI(t, "echo 'no index' >&2; exit 3")
+	d = RepowiseRunner{CLI: cli, Timeout: 10 * time.Second}.Run(context.Background(), "", "HEAD")
+	if d.Status != "unavailable" || !strings.Contains(d.Note, "no index") {
+		t.Fatalf("cli failure must degrade: %+v", d)
+	}
+	if d.Revspec != "HEAD" {
+		t.Fatalf("revspec must be echoed: %+v", d)
+	}
+
+	// Missing binary → unavailable.
+	d = RepowiseRunner{CLI: "/nonexistent/repowise-binary", Timeout: 5 * time.Second}.Run(context.Background(), "", "")
+	if d.Status != "unavailable" || d.Note == "" {
+		t.Fatalf("missing binary must degrade: %+v", d)
+	}
+
+	// Revspec is forwarded; path is forwarded ($1 is the subcommand).
+	cli = fakeRiskCLI(t, `test "$1" = "risk" && test "$2" = "--format" && test "$3" = "json" && test "$4" = "--path" && test "$5" = "/repo" && test "$6" = "abc..def" && echo '{"review_priority":"low"}' || exit 9`)
+	d = RepowiseRunner{CLI: cli, Timeout: 10 * time.Second}.Run(context.Background(), "/repo", "abc..def")
+	if d.Status != "ok" || d.ReviewPriority != "low" {
+		t.Fatalf("args forwarding failed: %+v (%s)", d, d.Note)
 	}
 }

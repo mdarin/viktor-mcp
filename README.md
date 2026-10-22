@@ -107,6 +107,26 @@ printf '%s\n%s\n%s\n' \
 Пропущенные поля берут дефолты (`bge-m3`, `viktor_tasks`, localhost).
 CLI-приоритет: флаг > `VIKTOR_MEMORY_*` env > секция `memory`.
 
+#### Секция repowise (опциональна)
+
+Опциональный digest change-risk в `verify_review` (не блокирующий):
+
+```json
+{
+  "repowise": {
+    "cli": "repowise",
+    "repo": "/path/to/repo",
+    "timeout": "90s"
+  }
+}
+```
+
+Без секции `verify_review` ведёт себя как раньше. С секцией к вердикту
+добавляется `change_risk` (`risk_percentile`, `review_priority`,
+`findings`) из локального CLI `repowise risk --format json`; недоступный
+CLI / нет индекса / таймаут деградируют в строку `"status": "unavailable"`
+в дайджесте — вердикт и гейт не меняются.
+
 | Переменная                | Обязательна | По умолчанию          | Описание                                   |
 |---------------------------|-------------|-----------------------|--------------------------------------------|
 | `VIKUNJA_URL`             | да*         | —                     | Базовый URL Vikunja (инстанс `default`)    |

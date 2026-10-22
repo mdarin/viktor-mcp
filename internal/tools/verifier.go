@@ -69,7 +69,13 @@ func (r *Registry) verifierFor(instance string) (*verifier.Verifier, error) {
 		Collection:   cfg.Collection,
 		QdrantAPIKey: cfg.QdrantAPIKey,
 	}.WithDefaults()
-	return verifier.New(vcfg, api, memory.NewOllama(vcfg.OllamaURL), memory.NewQdrant(vcfg.QdrantURL, vcfg.QdrantAPIKey), verifier.GitDiff, sh), nil
+	v := verifier.New(vcfg, api, memory.NewOllama(vcfg.OllamaURL), memory.NewQdrant(vcfg.QdrantURL, vcfg.QdrantAPIKey), verifier.GitDiff, sh)
+	// Optional change-risk digest (card #823): only when the repowise
+	// section exists; off by default, failures degrade to "unavailable".
+	if rw := r.repowiseFor(); rw != nil {
+		v.Risk = verifier.RepowiseRunner{CLI: rw.CLIPath(), Repo: rw.Repo, Timeout: rw.TimeoutFor()}.Run
+	}
+	return v, nil
 }
 
 // verifyAsync is the background hook fired by submit_for_review: it

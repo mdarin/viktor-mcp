@@ -104,11 +104,40 @@ func (m *MemorySection) RepoFor(instance string) string {
 	return m.GitEnrich[instance]
 }
 
+// RepowiseSection enables the optional repowise change-risk digest in
+// verify_review (card #823). Absent section → the feature is off and
+// verify_review behaves exactly as before. The digest is strictly
+// non-blocking: CLI failures degrade to an "unavailable" line.
+type RepowiseSection struct {
+	CLI     string
+	Repo    string
+	Timeout time.Duration
+}
+
+// CLIPath resolves the repowise binary (PATH when unset).
+func (s *RepowiseSection) CLIPath() string {
+	if s == nil || s.CLI == "" {
+		return "repowise"
+	}
+	return s.CLI
+}
+
+// TimeoutFor resolves the CLI timeout (90s when unset).
+func (s *RepowiseSection) TimeoutFor() time.Duration {
+	if s == nil || s.Timeout <= 0 {
+		return 90 * time.Second
+	}
+	return s.Timeout
+}
+
 type Config struct {
 	Path            string
 	DefaultInstance string
 	Instances       map[string]*Instance
 	Memory          *MemorySection
+	// Repowise is the optional change-risk digest config (card #823);
+	// nil means the feature is off.
+	Repowise *RepowiseSection
 	// Agent is the identity this server run serves (env VIKUNJA_AGENT);
 	// empty means the operator token is used everywhere.
 	Agent string
@@ -118,6 +147,13 @@ type fileConfig struct {
 	DefaultInstance string                    `json:"default_instance"`
 	Instances       map[string]fileInstanceIn `json:"instances"`
 	Memory          *fileMemoryIn             `json:"memory"`
+	Repowise        *fileRepowiseIn           `json:"repowise"`
+}
+
+type fileRepowiseIn struct {
+	CLI     string `json:"cli"`
+	Repo    string `json:"repo"`
+	Timeout string `json:"timeout"`
 }
 
 type fileMemoryIn struct {
@@ -247,6 +283,17 @@ func (c *Config) applyFile(fc *fileConfig) error {
 			QdrantAPIKey: fc.Memory.QdrantAPIKey,
 			GitEnrich:    fc.Memory.GitEnrich,
 		}
+	}
+	if fc.Repowise != nil {
+		rw := &RepowiseSection{CLI: fc.Repowise.CLI, Repo: fc.Repowise.Repo}
+		if t := strings.TrimSpace(fc.Repowise.Timeout); t != "" {
+			d, err := time.ParseDuration(t)
+			if err != nil {
+				return fmt.Errorf("repowise: timeout: %w", err)
+			}
+			rw.Timeout = d
+		}
+		c.Repowise = rw
 	}
 	return nil
 }

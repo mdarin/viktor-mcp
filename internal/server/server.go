@@ -76,6 +76,9 @@ func Build(_ context.Context, stdout io.Writer) (*mcp.Server, *tools.Registry, e
 	if cfg.Memory != nil {
 		registry.SetMemoryConfigs(memoryPerInstance(cfg))
 	}
+	if cfg.Repowise != nil {
+		registry.SetRepowise(cfg.Repowise)
+	}
 	registry.RegisterAll()
 
 	defaultURL := cfg.Instances[cfg.DefaultInstance].URL

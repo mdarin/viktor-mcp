@@ -290,3 +290,38 @@ func TestApplyBotFromEnv(t *testing.T) {
 		t.Errorf("TokenFor(crewai-agent) = %q, want operator fallback", got)
 	}
 }
+
+func TestLoadRepowiseSection(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	content := `{
+		"default_instance": "default",
+		"instances": {"default": {"url": "http://x:1", "token": "tk"}},
+		"repowise": {"cli": "/usr/local/bin/repowise", "repo": "/repo", "timeout": "30s"}
+	}`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := load(env(), path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Repowise == nil {
+		t.Fatal("repowise section must load")
+	}
+	if cfg.Repowise.CLI != "/usr/local/bin/repowise" || cfg.Repowise.Repo != "/repo" || cfg.Repowise.Timeout != 30*time.Second {
+		t.Fatalf("repowise = %+v", cfg.Repowise)
+	}
+
+	// Absent section → off.
+	path2 := filepath.Join(t.TempDir(), "config2.json")
+	if err := os.WriteFile(path2, []byte(`{"instances": {"default": {"url": "http://x:1", "token": "tk"}}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = load(env(), path2, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Repowise != nil {
+		t.Fatal("missing section must keep repowise off")
+	}
+}
