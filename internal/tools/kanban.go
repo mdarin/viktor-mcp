@@ -52,4 +52,5 @@ func registerKanban(r *Registry) {
 	add[KanbanDeleteBucketIn](r, "kanban_delete_bucket", "Delete a kanban bucket; tasks may move to another bucket", handleKanbanDeleteBucket(r))
 	add[KanbanSortBucketIn](r, "kanban_sort_bucket", "Re-sort all tasks in a bucket", handleKanbanSortBucket(r))
 	add[KanbanTasksByBucketIn](r, "kanban_tasks_by_bucket", "Get tasks grouped by kanban bucket", handleKanbanTasksByBucket(r))
+	add[BoardAuditIn](r, "board_audit", "Check a project's kanban board against its profile (missing/extra columns, done bucket, counts)", handleBoardAudit(r))
 }

@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -42,6 +43,22 @@ func findTaskBucket(buckets []map[string]any, taskID int) (int, bool) {
 func asInt(v any) int {
 	f, _ := v.(float64)
 	return int(f)
+}
+
+// numAny extracts a numeric JSON value (float64/int/json.Number).
+func numAny(v any) (float64, bool) {
+	switch n := v.(type) {
+	case float64:
+		return n, true
+	case int:
+		return float64(n), true
+	case int64:
+		return float64(n), true
+	case json.Number:
+		f, err := n.Float64()
+		return f, err == nil
+	}
+	return 0, false
 }
 
 func ensureDoneBucket(ctx context.Context, r *Registry, projectID int, view map[string]any) (int, error) {

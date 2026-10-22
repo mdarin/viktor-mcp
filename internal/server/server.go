@@ -79,6 +79,7 @@ func Build(_ context.Context, stdout io.Writer) (*mcp.Server, *tools.Registry, e
 	if cfg.Repowise != nil {
 		registry.SetRepowise(cfg.Repowise)
 	}
+	registry.SetBoard(cfg.Board)
 	registry.RegisterAll()
 
 	defaultURL := cfg.Instances[cfg.DefaultInstance].URL

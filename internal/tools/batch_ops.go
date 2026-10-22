@@ -74,6 +74,59 @@ func moveTaskToBucket(ctx context.Context, r *Registry, projectID, viewID, bucke
 	return r.api().MoveTaskToBucket(ctx, projectID, viewID, bucketID, taskID, &out)
 }
 
+// maxBucketPositions returns the current max task position per bucket id,
+// read from the board read model (card #845). A move without a position
+// lands the task at position 0 — the top of the column in the UI.
+func maxBucketPositions(ctx context.Context, r *Registry, projectID, viewID int) (map[int]float64, error) {
+	var board []map[string]any
+	if err := r.api().ViewTasks(ctx, projectID, viewID, &board); err != nil {
+		return nil, err
+	}
+	maxPos := map[int]float64{}
+	for _, b := range board {
+		bid := asInt(b["id"])
+		tasks, _ := b["tasks"].([]any)
+		for _, t := range tasks {
+			tm, ok := t.(map[string]any)
+			if !ok {
+				continue
+			}
+			if p, ok := numAny(tm["position"]); ok && p > maxPos[bid] {
+				maxPos[bid] = p
+			}
+		}
+	}
+	return maxPos, nil
+}
+
+// placeAtBucketEnd assigns the task the next free position in its bucket so
+// it appears at the bottom of the column, matching a UI drag (card #845).
+// best-effort: failures do not fail the move itself.
+func placeAtBucketEnd(ctx context.Context, r *Registry, viewID, bucketID, taskID int, maxPos map[int]float64) error {
+	if maxPos == nil {
+		return nil
+	}
+	next := maxPos[bucketID] + 1
+	maxPos[bucketID] = next
+	var out any
+	if err := r.api().SetTaskPosition(ctx, taskID, map[string]any{"project_view_id": viewID, "position": next}, &out); err != nil {
+		return err
+	}
+	return nil
+}
+
+// moveAndPlace moves a task into a bucket and puts it at the end of that
+// column (UI-visible semantics); maxPos may be nil to skip placement.
+func moveAndPlace(ctx context.Context, r *Registry, projectID, viewID, bucketID, taskID int, maxPos map[int]float64) error {
+	if err := moveTaskToBucket(ctx, r, projectID, viewID, bucketID, taskID); err != nil {
+		return err
+	}
+	if err := placeAtBucketEnd(ctx, r, viewID, bucketID, taskID, maxPos); err != nil {
+		return fmt.Errorf("position: %w", err)
+	}
+	return nil
+}
+
 func projectTasksWithLabel(ctx context.Context, r *Registry, projectID int, labelFilter string) ([]map[string]any, error) {
 	var tasks []map[string]any
 	if err := r.api().ProjectTasks(ctx, projectID, client.ListParams{Filter: "done = false"}, &tasks); err != nil {
@@ -126,6 +179,20 @@ func handleBatchCreateTasks(r *Registry) mcp.ToolHandlerFor[BatchCreateTasksIn, 
 		failures := []map[string]any{}
 		refs := map[string]int{}
 		relations := []struct{ from, kind, to string }{}
+		var maxPos map[int]float64
+		anyBucket := false
+		for _, spec := range in.Tasks {
+			if spec.Bucket != "" {
+				anyBucket = true
+				break
+			}
+		}
+		if anyBucket {
+			viewID, err := findKanbanViewID(ctx, r, in.ProjectID)
+			if err == nil {
+				maxPos, _ = maxBucketPositions(ctx, r, in.ProjectID, viewID)
+			}
+		}
 		for i, spec := range in.Tasks {
 			body := map[string]any{"title": spec.Title}
 			if spec.Description != "" {
@@ -160,7 +227,7 @@ func handleBatchCreateTasks(r *Registry) mcp.ToolHandlerFor[BatchCreateTasksIn, 
 				viewID, bucketID, err := resolveBucketByName(ctx, r, in.ProjectID, spec.Bucket)
 				if err != nil {
 					failures = append(failures, map[string]any{"index": float64(i), "ref": spec.Ref, "error": fmt.Sprintf("bucket: %v", err)})
-				} else if err := moveTaskToBucket(ctx, r, in.ProjectID, viewID, bucketID, id); err != nil {
+				} else if err := moveAndPlace(ctx, r, in.ProjectID, viewID, bucketID, id, maxPos); err != nil {
 					failures = append(failures, map[string]any{"index": float64(i), "ref": spec.Ref, "error": fmt.Sprintf("bucket move: %v", err)})
 				}
 			}
@@ -345,8 +412,8 @@ func attachLabelIfMissing(ctx context.Context, r *Registry, taskID, labelID int,
 
 func handleBatchMoveByLabel(r *Registry) mcp.ToolHandlerFor[BatchMoveByLabelIn, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in BatchMoveByLabelIn) (*mcp.CallToolResult, any, error) {
-		if in.ProjectID == 0 || in.ViewID == 0 || in.BucketID == 0 {
-			return nil, nil, fmt.Errorf("project_id, view_id and bucket_id are required")
+		if in.ProjectID == 0 || (in.ViewID == 0 && in.Bucket == "") || (in.BucketID == 0 && in.Bucket == "") {
+			return nil, nil, fmt.Errorf("project_id and a target bucket (bucket_id or bucket name) are required")
 		}
 		if in.LabelFilter == "" {
 			return nil, nil, fmt.Errorf("label_filter is required (safety guard against moving everything)")
@@ -355,11 +422,26 @@ func handleBatchMoveByLabel(r *Registry) mcp.ToolHandlerFor[BatchMoveByLabelIn, 
 		if err != nil {
 			return nil, nil, err
 		}
+		bucketID := in.BucketID
+		if bucketID == 0 && in.Bucket != "" {
+			viewID, bid, err := resolveBucketByName(ctx, r, in.ProjectID, in.Bucket)
+			if err != nil {
+				return nil, nil, err
+			}
+			bucketID = bid
+			if in.ViewID == 0 {
+				in.ViewID = viewID
+			}
+		}
+		if in.ProjectID == 0 || in.ViewID == 0 || bucketID == 0 {
+			return nil, nil, fmt.Errorf("bucket required: set bucket_id or bucket (name)")
+		}
+		maxPos, _ := maxBucketPositions(ctx, r, in.ProjectID, in.ViewID)
 		moved := []int{}
 		failures := []map[string]any{}
 		for _, t := range tasks {
 			id := asInt(t["id"])
-			if err := moveTaskToBucket(ctx, r, in.ProjectID, in.ViewID, in.BucketID, id); err != nil {
+			if err := moveAndPlace(ctx, r, in.ProjectID, in.ViewID, bucketID, id, maxPos); err != nil {
 				failures = append(failures, map[string]any{"task_id": float64(id), "error": err.Error()})
 				continue
 			}
@@ -447,29 +529,51 @@ func handleBatchCreateLabels(r *Registry) mcp.ToolHandlerFor[BatchCreateLabelsIn
 
 func handleBatchAssignBuckets(r *Registry) mcp.ToolHandlerFor[BatchAssignBucketsIn, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in BatchAssignBucketsIn) (*mcp.CallToolResult, any, error) {
-		if in.ProjectID == 0 || in.ViewID == 0 {
-			return nil, nil, fmt.Errorf("project_id and view_id are required")
+		if in.ProjectID == 0 || (in.ViewID == 0 && in.Bucket == "") {
+			return nil, nil, fmt.Errorf("project_id and view_id (or bucket name) are required")
 		}
 		if len(in.Assignments) == 0 {
 			return nil, nil, fmt.Errorf("assignments must not be empty")
 		}
 		assigned := []map[string]any{}
 		failures := []map[string]any{}
+		defaultBucketID := 0
+		if in.Bucket != "" {
+			viewID, bid, err := resolveBucketByName(ctx, r, in.ProjectID, in.Bucket)
+			if err != nil {
+				return nil, nil, err
+			}
+			defaultBucketID = bid
+			if in.ViewID == 0 {
+				in.ViewID = viewID
+			}
+		}
+		maxPos, _ := maxBucketPositions(ctx, r, in.ProjectID, in.ViewID)
 		for i, a := range in.Assignments {
-			if a.TaskID == 0 || a.BucketID == 0 {
-				failures = append(failures, map[string]any{"index": float64(i), "error": "task_id and bucket_id are required"})
+			bucketID := a.BucketID
+			if bucketID == 0 {
+				bucketID = defaultBucketID
+			}
+			if a.TaskID == 0 || bucketID == 0 {
+				failures = append(failures, map[string]any{"index": float64(i), "error": "task_id and bucket_id (or the bucket name) are required"})
 				continue
 			}
-			if err := moveTaskToBucket(ctx, r, in.ProjectID, in.ViewID, a.BucketID, a.TaskID); err != nil {
-				failures = append(failures, map[string]any{"index": float64(i), "task_id": float64(a.TaskID), "error": err.Error()})
-				continue
-			}
-			row := map[string]any{"task_id": float64(a.TaskID), "bucket_id": float64(a.BucketID)}
 			if a.Position != 0 {
+				if err := moveTaskToBucket(ctx, r, in.ProjectID, in.ViewID, bucketID, a.TaskID); err != nil {
+					failures = append(failures, map[string]any{"index": float64(i), "task_id": float64(a.TaskID), "error": err.Error()})
+					continue
+				}
 				var out any
 				if err := r.api().SetTaskPosition(ctx, a.TaskID, map[string]any{"project_view_id": in.ViewID, "position": float64(a.Position)}, &out); err != nil {
 					failures = append(failures, map[string]any{"index": float64(i), "task_id": float64(a.TaskID), "error": fmt.Sprintf("position: %v", err)})
 				}
+			} else if err := moveAndPlace(ctx, r, in.ProjectID, in.ViewID, bucketID, a.TaskID, maxPos); err != nil {
+				failures = append(failures, map[string]any{"index": float64(i), "task_id": float64(a.TaskID), "error": err.Error()})
+				continue
+			}
+			row := map[string]any{"task_id": float64(a.TaskID), "bucket_id": float64(bucketID)}
+			if a.Position != 0 {
+				row["position"] = float64(a.Position)
 			}
 			assigned = append(assigned, row)
 			time.Sleep(300 * time.Millisecond)
@@ -488,6 +592,7 @@ func handleBatchLabelToBuckets(r *Registry) mcp.ToolHandlerFor[BatchLabelToBucke
 		}
 		moved := []map[string]any{}
 		failures := []map[string]any{}
+		maxPos, _ := maxBucketPositions(ctx, r, in.ProjectID, in.ViewID)
 		for label, bucketID := range in.LabelToBucketMap {
 			if bucketID == 0 {
 				failures = append(failures, map[string]any{"label": label, "error": "bucket_id must not be 0"})
@@ -500,7 +605,7 @@ func handleBatchLabelToBuckets(r *Registry) mcp.ToolHandlerFor[BatchLabelToBucke
 			}
 			for _, t := range tasks {
 				id := asInt(t["id"])
-				if err := moveTaskToBucket(ctx, r, in.ProjectID, in.ViewID, bucketID, id); err != nil {
+				if err := moveAndPlace(ctx, r, in.ProjectID, in.ViewID, bucketID, id, maxPos); err != nil {
 					failures = append(failures, map[string]any{"label": label, "task_id": float64(id), "error": err.Error()})
 					continue
 				}

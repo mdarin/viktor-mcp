@@ -130,6 +130,49 @@ func (s *RepowiseSection) TimeoutFor() time.Duration {
 	return s.Timeout
 }
 
+// BoardSection defines the default kanban board profile (card #845): the
+// column titles kanban_setup creates and board_audit checks for. Resolution
+// order: explicit tool argument > ./.viktor.json (board.profile) > global
+// config board.profile > builtin default.
+type BoardSection struct {
+	Profile []string
+}
+
+// DefaultBoardProfile is the builtin column set.
+var DefaultBoardProfile = []string{"todo", "in-progress", "done"}
+
+// ProfileFor returns the effective profile (builtin default when unset).
+func (s *BoardSection) ProfileFor() []string {
+	if s == nil || len(s.Profile) == 0 {
+		return append([]string(nil), DefaultBoardProfile...)
+	}
+	return s.Profile
+}
+
+// LoadRepoBoard reads board settings from a repo-local .viktor.json:
+// {"board": {"profile": ["todo", "doing", "done"]}}. Missing file → nil, nil.
+func LoadRepoBoard(dir string) (*BoardSection, error) {
+	data, err := os.ReadFile(filepath.Join(dir, ".viktor.json"))
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var fc struct {
+		Board *struct {
+			Profile []string `json:"profile"`
+		} `json:"board"`
+	}
+	if err := json.Unmarshal(data, &fc); err != nil {
+		return nil, fmt.Errorf(".viktor.json: invalid JSON: %w", err)
+	}
+	if fc.Board == nil {
+		return nil, nil
+	}
+	return &BoardSection{Profile: fc.Board.Profile}, nil
+}
+
 type Config struct {
 	Path            string
 	DefaultInstance string
@@ -138,6 +181,9 @@ type Config struct {
 	// Repowise is the optional change-risk digest config (card #823);
 	// nil means the feature is off.
 	Repowise *RepowiseSection
+	// Board is the optional kanban board profile config (card #845); nil
+	// means the builtin default profile applies.
+	Board *BoardSection
 	// Agent is the identity this server run serves (env VIKUNJA_AGENT);
 	// empty means the operator token is used everywhere.
 	Agent string
@@ -148,6 +194,7 @@ type fileConfig struct {
 	Instances       map[string]fileInstanceIn `json:"instances"`
 	Memory          *fileMemoryIn             `json:"memory"`
 	Repowise        *fileRepowiseIn           `json:"repowise"`
+	Board           *BoardSection             `json:"board"`
 }
 
 type fileRepowiseIn struct {
@@ -294,6 +341,9 @@ func (c *Config) applyFile(fc *fileConfig) error {
 			rw.Timeout = d
 		}
 		c.Repowise = rw
+	}
+	if fc.Board != nil {
+		c.Board = fc.Board
 	}
 	return nil
 }

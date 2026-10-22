@@ -126,7 +126,8 @@ func callTool(t *testing.T, session *mcp.ClientSession, name string, args map[st
 		return nil, err
 	}
 	if res.IsError {
-		return nil, fmt.Errorf("tool error: %v", res.Content)
+		raw, _ := json.Marshal(res.Content)
+		return nil, fmt.Errorf("tool error: %s", raw)
 	}
 	out, _ := json.Marshal(res.StructuredContent)
 	var m map[string]any

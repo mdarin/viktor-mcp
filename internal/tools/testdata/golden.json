@@ -68,6 +68,9 @@
             "array"
           ]
         },
+        "bucket": {
+          "type": "string"
+        },
         "project_id": {
           "type": "integer"
         },
@@ -250,6 +253,9 @@
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
+        "bucket": {
+          "type": "string"
+        },
         "bucket_id": {
           "type": "integer"
         },
@@ -411,6 +417,34 @@
       "type": "object"
     },
     "name": "batch_update_tasks"
+  },
+  {
+    "description": "Check a project's kanban board against its profile (missing/extra columns, done bucket, counts)",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "profile": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "project_id": {
+          "type": "integer"
+        },
+        "view_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "project_id"
+      ],
+      "type": "object"
+    },
+    "name": "board_audit"
   },
   {
     "description": "Create a bot user (username must start with 'bot-')",
@@ -1831,6 +1865,9 @@
         "apply_sort": {
           "type": "boolean"
         },
+        "bucket": {
+          "type": "string"
+        },
         "bucket_id": {
           "type": "integer"
         },
@@ -1846,9 +1883,7 @@
       },
       "required": [
         "task_id",
-        "project_id",
-        "view_id",
-        "bucket_id"
+        "project_id"
       ],
       "type": "object"
     },

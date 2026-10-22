@@ -247,8 +247,15 @@ func (c *Client) ViewTasks(ctx context.Context, projectID, viewID int, out any) 
 		// v1 returns buckets with nested tasks.
 		return c.Get(ctx, url("/projects/%d/views/%d/tasks", projectID, viewID), nil, out)
 	}
-	// v2 returns a flat paginated task list: reassemble the v1-style
-	// bucket shape (id/title/position/tasks) for callers.
+	// v2: the buckets/tasks route returns buckets with their tasks; the
+	// flat /views/{v}/tasks list carries bucket_id=0 on 2.7.x, so the old
+	// reassembly dumped every task into the first bucket (card #845).
+	err := c.KanbanBoard(ctx, projectID, viewID, out)
+	if err == nil {
+		return nil
+	}
+	// Older servers without the buckets/tasks route: fall back to
+	// reassembling the v1-style bucket shape (id/title/position/tasks).
 	var buckets []map[string]any
 	if err := c.List(ctx, url("/projects/%d/views/%d/buckets", projectID, viewID), ListOptions{}, &buckets); err != nil {
 		return err
@@ -361,12 +368,28 @@ func (c *Client) SearchAll(ctx context.Context, s string, out any) error {
 }
 
 func (c *Client) MoveTaskToBucket(ctx context.Context, projectID, viewID, bucketID, taskID int, out any) error {
+	if c.api != "v1" {
+		// v2 TaskBucket accepts task_id only; extra body properties are
+		// rejected with 422 (card #845).
+		return c.Put(ctx, url("/projects/%d/views/%d/buckets/%d/tasks", projectID, viewID, bucketID), map[string]any{"task_id": taskID}, out)
+	}
 	body := map[string]any{
 		"task_id":         taskID,
 		"project_view_id": viewID,
 		"bucket_id":       bucketID,
 	}
-	return c.updateVerb(ctx, url("/projects/%d/views/%d/buckets/%d/tasks", projectID, viewID, bucketID), body, out)
+	return c.createVerb(ctx, url("/projects/%d/views/%d/buckets/%d/tasks", projectID, viewID, bucketID), body, out)
+}
+
+// KanbanBoard reads the kanban board of a view: buckets with their tasks,
+// counts and per-bucket positions. On v2 this is the buckets/tasks route —
+// the only endpoint that reflects bucket membership on 2.7.x (GET /buckets
+// and GET /tasks return bucket_id=0 / count=0 for every task, card #845).
+func (c *Client) KanbanBoard(ctx context.Context, projectID, viewID int, out any) error {
+	if c.api == "v1" {
+		return c.Get(ctx, url("/projects/%d/views/%d/tasks", projectID, viewID), nil, out)
+	}
+	return c.List(ctx, url("/projects/%d/views/%d/buckets/tasks", projectID, viewID), ListOptions{}, out)
 }
 
 type Team struct {

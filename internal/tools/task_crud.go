@@ -155,21 +155,36 @@ func handleTaskMove(r *Registry) mcp.ToolHandlerFor[TaskMoveIn, any] {
 
 func handleTaskSetPosition(r *Registry) mcp.ToolHandlerFor[TaskSetPositionIn, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in TaskSetPositionIn) (*mcp.CallToolResult, any, error) {
-		body := map[string]any{
-			"project_id":      in.ProjectID,
-			"project_view_id": in.ViewID,
-			"task_id":         in.TaskID,
-			"bucket_id":       in.BucketID,
+		viewID, bucketID := in.ViewID, in.BucketID
+		if in.Bucket != "" {
+			if in.ProjectID == 0 {
+				return nil, nil, fmt.Errorf("project_id is required when bucket (name) is used")
+			}
+			vid, bid, err := resolveBucketByName(ctx, r, in.ProjectID, in.Bucket)
+			if err != nil {
+				return nil, nil, err
+			}
+			if viewID == 0 {
+				viewID = vid
+			}
+			bucketID = bid
 		}
-		var pos map[string]any
-		if err := r.api().SetTaskPosition(ctx, in.TaskID, body, &pos); err != nil {
+		if viewID == 0 || bucketID == 0 {
+			return nil, nil, fmt.Errorf("view_id and bucket_id (or bucket name) are required")
+		}
+		maxPos, err := maxBucketPositions(ctx, r, in.ProjectID, viewID)
+		if err != nil {
+			return nil, nil, fmt.Errorf("read board: %w", err)
+		}
+		if err := moveAndPlace(ctx, r, in.ProjectID, viewID, bucketID, in.TaskID, maxPos); err != nil {
 			return nil, nil, err
 		}
 		return nil, map[string]any{
 			"task_id":   in.TaskID,
-			"view_id":   in.ViewID,
-			"bucket_id": in.BucketID,
-			"position":  pos["position"],
+			"view_id":   viewID,
+			"bucket_id": bucketID,
+			"position":  maxPos[bucketID],
+			"moved":     true,
 		}, nil
 	}
 }

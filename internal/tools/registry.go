@@ -52,6 +52,9 @@ type Registry struct {
 	// repowise enables the optional change-risk digest in verify_review
 	// (card #823); nil = feature off.
 	repowise *config.RepowiseSection
+	// board is the optional kanban board profile config (card #845);
+	// nil = builtin default profile.
+	board *config.BoardSection
 }
 
 func NewRegistry(server *mcp.Server, api *client.Client) *Registry {
@@ -78,6 +81,26 @@ func (r *Registry) repowiseFor() *config.RepowiseSection {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.repowise
+}
+
+// SetBoard installs the optional kanban board profile config (card #845).
+func (r *Registry) SetBoard(cfg *config.BoardSection) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.board = cfg
+}
+
+// boardProfile resolves the effective board profile: global config first,
+// then a repo-local ./.viktor.json (board.profile) override, then the
+// builtin default.
+func (r *Registry) boardProfile() []string {
+	r.mu.RLock()
+	global := r.board
+	r.mu.RUnlock()
+	if repo, err := config.LoadRepoBoard("."); err == nil && repo != nil && len(repo.Profile) > 0 {
+		return repo.Profile
+	}
+	return global.ProfileFor()
 }
 
 func (r *Registry) SetToolTimeout(d time.Duration) {

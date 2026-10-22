@@ -43,6 +43,9 @@ type BatchMoveByLabelIn struct {
 	LabelFilter string `json:"label_filter"`
 	ViewID      int    `json:"view_id"`
 	BucketID    int    `json:"bucket_id"`
+	// Bucket resolves the target bucket by title (any kanban view of the
+	// project) when bucket_id is omitted (card #845).
+	Bucket string `json:"bucket,omitempty"`
 }
 
 type BatchCompleteByLabelIn struct {
@@ -60,8 +63,11 @@ type BatchLabelSpec struct {
 }
 
 type BatchAssignBucketsIn struct {
-	ProjectID   int                `json:"project_id"`
-	ViewID      int                `json:"view_id"`
+	ProjectID int                `json:"project_id"`
+	ViewID    int                `json:"view_id"`
+	// Bucket is the default bucket (by title) for assignments that omit
+	// bucket_id (card #845).
+	Bucket     string             `json:"bucket,omitempty"`
 	Assignments []BucketAssignSpec `json:"assignments"`
 }
 

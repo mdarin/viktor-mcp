@@ -243,6 +243,7 @@ go test ./internal/tools -update-snapshot
 | `batch_relabel` | Bulk update labels on multiple tasks |
 | `batch_reorder_tasks` | Set positions for multiple tasks in a view |
 | `batch_update_tasks` | Update multiple tasks at once |
+| `board_audit` | Check a project's kanban board against its profile (missing/extra columns, done bucket, counts) |
 | `bot_create` | Create a bot user (username must start with 'bot-') |
 | `bot_delete` | Delete a bot user permanently |
 | `bot_disable` | Disable a bot user (status=2); revokes its tokens' access immediately |

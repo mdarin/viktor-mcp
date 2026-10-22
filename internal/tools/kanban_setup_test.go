@@ -5,11 +5,15 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"viktor/internal/client"
+	"viktor/internal/config"
 )
 
 type fakeKanban struct {
@@ -21,7 +25,7 @@ type fakeKanban struct {
 	nextViewID    int
 }
 
-func newKanbanFixture(t *testing.T) (*fakeKanban, *mcp.ClientSession) {
+func newKanbanFixture(t *testing.T, boards ...*config.BoardSection) (*fakeKanban, *mcp.ClientSession) {
 	t.Helper()
 	f := &fakeKanban{
 		projects:      map[string]int{},
@@ -35,7 +39,11 @@ func newKanbanFixture(t *testing.T) (*fakeKanban, *mcp.ClientSession) {
 
 	api := client.New(srv.URL, "test-token", 0)
 	srvMCP := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "0.0.0"}, nil)
-	NewRegistry(srvMCP, api).RegisterAll()
+	reg := NewRegistry(srvMCP, api)
+	for _, b := range boards {
+		reg.SetBoard(b)
+	}
+	reg.RegisterAll()
 
 	ctx := context.Background()
 	c := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "0.0.0"}, nil)
@@ -57,6 +65,56 @@ func (f *fakeKanban) addDefaultBuckets(viewID int) {
 	f.buckets[viewID] = []map[string]any{
 		{"id": float64(1), "title": "Backlog", "position": float64(0)},
 		{"id": float64(2), "title": "Done", "position": float64(1000)},
+	}
+}
+
+var bucketMoveRe = regexp.MustCompile(`^/api/v2/projects/9/views/(\d+)/buckets/(\d+)/tasks$`)
+
+// moveTaskInFixture relocates a task map between buckets of a view.
+func (f *fakeKanban) moveTaskInFixture(viewID, bucketID, taskID int) {
+	buckets := f.buckets[viewID]
+	var moved map[string]any
+	kept := buckets[:0]
+	for _, b := range buckets {
+		tasks, _ := b["tasks"].([]any)
+		out := tasks[:0]
+		for _, t := range tasks {
+			tm, ok := t.(map[string]any)
+			if ok && asInt(tm["id"]) == taskID {
+				moved = tm
+				continue
+			}
+			out = append(out, t)
+		}
+		b["tasks"] = out
+		if asInt(b["id"]) == bucketID {
+			kept = append(kept, b)
+			continue
+		}
+		kept = append(kept, b)
+	}
+	if moved == nil {
+		moved = map[string]any{"id": float64(taskID), "title": "moved", "position": float64(0)}
+	}
+	for _, b := range kept {
+		if asInt(b["id"]) == bucketID {
+			b["tasks"] = append(b["tasks"].([]any), moved)
+		}
+	}
+	f.buckets[viewID] = kept
+}
+
+// setTaskPositionInFixture updates the position of a task wherever it sits.
+func (f *fakeKanban) setTaskPositionInFixture(taskID, position int) {
+	for _, buckets := range f.buckets {
+		for _, b := range buckets {
+			tasks, _ := b["tasks"].([]any)
+			for _, t := range tasks {
+				if tm, ok := t.(map[string]any); ok && asInt(tm["id"]) == taskID {
+					tm["position"] = float64(position)
+				}
+			}
+		}
 	}
 }
 
@@ -97,6 +155,25 @@ func (f *fakeKanban) handler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		json.NewEncoder(w).Encode(in)
+	case r.Method == http.MethodGet && r.URL.Path == "/api/v2/projects/9/views/40/buckets/tasks":
+		if p := r.URL.Query().Get("page"); p != "" && p != "1" {
+			json.NewEncoder(w).Encode([]any{})
+			return
+		}
+		json.NewEncoder(w).Encode(f.buckets[40])
+	case r.Method == http.MethodPut && bucketMoveRe.FindStringSubmatch(r.URL.Path) != nil:
+		m := bucketMoveRe.FindStringSubmatch(r.URL.Path)
+		viewID, _ := strconv.Atoi(m[1])
+		bucketID, _ := strconv.Atoi(m[2])
+		taskID := asInt(body()["task_id"])
+		f.moveTaskInFixture(viewID, bucketID, taskID)
+		json.NewEncoder(w).Encode(map[string]any{"task_id": float64(taskID), "bucket_id": float64(bucketID), "project_view_id": float64(viewID)})
+	case r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/api/v2/tasks/") && strings.HasSuffix(r.URL.Path, "/position"):
+		in := body()
+		idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/v2/tasks/"), "/position")
+		taskID, _ := strconv.Atoi(idStr)
+		f.setTaskPositionInFixture(taskID, asInt(in["position"]))
+		json.NewEncoder(w).Encode(map[string]any{"task_id": float64(taskID), "position": in["position"]})
 	case r.Method == http.MethodGet && len(r.URL.Path) > 20 &&
 		r.URL.Path == "/api/v2/projects/9/views/40/buckets":
 		if p := r.URL.Query().Get("page"); p != "" && p != "1" {

@@ -29,7 +29,9 @@ func handleKanbanSetup(r *Registry) mcp.ToolHandlerFor[KanbanSetupIn, any] {
 			in.ViewTitle = "Kanban"
 		}
 		if len(in.Columns) == 0 {
-			in.Columns = []string{"todo", "in-progress", "done"}
+			// Explicit columns > repo/global board profile > builtin
+			// default (card #845).
+			in.Columns = r.boardProfile()
 		}
 		deleteDefault := true
 		if in.DeleteDefaultBuckets != nil {

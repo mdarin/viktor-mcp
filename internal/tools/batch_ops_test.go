@@ -24,11 +24,14 @@ func TestBatchCreateTasks(t *testing.T) {
 	if len(out["created"].([]any)) != 3 {
 		t.Fatalf("created = %v", out["created"])
 	}
-	if len(f.moves) != 1 {
+	if len(f.moves) != 2 {
 		t.Fatalf("moves = %v", f.moves)
 	}
-	if f.moves[0]["bucket_id"] != float64(41) {
-		t.Fatalf("move = %v", f.moves[0])
+	if f.moves[0]["task_id"] != float64(301) {
+		t.Fatalf("bucket move = %v", f.moves[0])
+	}
+	if f.moves[1]["position"] == nil {
+		t.Fatalf("end-of-column position missing: %v", f.moves[1])
 	}
 	found := 0
 	for _, task := range f.tasks {
@@ -123,7 +126,7 @@ func TestBatchCompleteAndMoveByLabel(t *testing.T) {
 	if out["count"] != float64(1) || out["moved"].([]any)[0] != float64(301) {
 		t.Fatalf("out = %v", out)
 	}
-	if len(f.moves) != 1 || f.moves[0]["task_id"] != float64(301) {
+	if len(f.moves) != 2 || f.moves[0]["task_id"] != float64(301) {
 		t.Fatalf("moves = %v", f.moves)
 	}
 	out, err = callCRUD(t, session, "batch_complete_by_label", map[string]any{
@@ -175,8 +178,14 @@ func TestBatchAssignBucketsAndReorder(t *testing.T) {
 	if out["count"] != float64(1) || len(out["errors"].([]any)) != 1 {
 		t.Fatalf("out = %v", out)
 	}
-	if len(f.moves) != 1 || f.moves[0]["bucket_id"] != float64(42) {
+	if len(f.moves) != 2 {
 		t.Fatalf("moves = %v", f.moves)
+	}
+	if f.moves[0]["task_id"] != float64(301) {
+		t.Fatalf("bucket move = %v", f.moves[0])
+	}
+	if f.moves[1]["position"] == nil {
+		t.Fatalf("end-of-column position missing: %v", f.moves[1])
 	}
 	out, err = callCRUD(t, session, "batch_reorder_tasks", map[string]any{
 		"project_id": 8, "view_id": 39,
@@ -188,7 +197,7 @@ func TestBatchAssignBucketsAndReorder(t *testing.T) {
 	if out["count"] != float64(1) {
 		t.Fatalf("out = %v", out)
 	}
-	if len(f.moves) != 2 || f.moves[1]["position"] != float64(5) {
+	if len(f.moves) != 3 || f.moves[1]["position"] == nil || f.moves[2]["position"] != float64(5) {
 		t.Fatalf("moves = %v", f.moves)
 	}
 }
@@ -208,7 +217,7 @@ func TestBatchLabelToBuckets(t *testing.T) {
 	if out["count"] != float64(1) || moved["task_id"] != float64(301) {
 		t.Fatalf("out = %v (302 done excluded)", out)
 	}
-	if len(f.moves) != 1 {
+	if len(f.moves) != 2 {
 		t.Fatalf("moves = %v", f.moves)
 	}
 }

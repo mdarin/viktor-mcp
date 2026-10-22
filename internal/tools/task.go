@@ -42,11 +42,14 @@ type TaskMoveIn struct {
 }
 
 type TaskSetPositionIn struct {
-	TaskID    int  `json:"task_id"`
-	ProjectID int  `json:"project_id"`
-	ViewID    int  `json:"view_id"`
-	BucketID  int  `json:"bucket_id"`
-	ApplySort bool `json:"apply_sort,omitempty"`
+	TaskID    int `json:"task_id"`
+	ProjectID int `json:"project_id"`
+	ViewID    int `json:"view_id,omitempty"`
+	BucketID  int `json:"bucket_id,omitempty"`
+	// Bucket resolves the target bucket by title in the project's kanban
+	// view; the task is placed at the end of that column (card #845).
+	Bucket    string `json:"bucket,omitempty"`
+	ApplySort bool   `json:"apply_sort,omitempty"`
 }
 
 type TaskSetRemindersIn struct {
