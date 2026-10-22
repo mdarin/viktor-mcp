@@ -198,7 +198,7 @@ func handleCalAddEvent(r *Registry) mcp.ToolHandlerFor[CalAddEventIn, any] {
 		labelID := 0
 		if !hasLabel {
 			var all []map[string]any
-			if err := r.api().ListLabels(ctx, &all); err != nil {
+			if err := r.api().ListLabels(ctx, client.ListParams{}, &all); err != nil {
 				return nil, nil, err
 			}
 			for _, l := range all {

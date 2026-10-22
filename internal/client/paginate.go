@@ -9,6 +9,7 @@ import (
 )
 
 type ListOptions struct {
+	Search string
 	Page    int
 	PerPage int
 	Limit   int
@@ -17,10 +18,17 @@ type ListOptions struct {
 
 func (o ListOptions) query(api string) map[string]string {
 	size := "page_size"
+	searchKey := "s"
 	if api == "v2" {
 		size = "per_page"
+		// v2 renamed the free-text search param from `s` to `q`;
+		// sending `s` is silently ignored (card #57 session).
+		searchKey = "q"
 	}
 	q := map[string]string{}
+	if o.Search != "" {
+		q[searchKey] = o.Search
+	}
 	if o.Page > 0 {
 		q["page"] = strconv.Itoa(o.Page)
 	}
@@ -84,6 +92,9 @@ func (c *Client) List(ctx context.Context, path string, opts ListOptions, out an
 		}
 		if n == 0 || opts.Page > 0 || len(all) >= opts.Limit {
 			break
+		}
+		if opts.PerPage > 0 && n < opts.PerPage {
+			break // short page: no more items server-side
 		}
 		if total > 0 && len(all) >= total {
 			break

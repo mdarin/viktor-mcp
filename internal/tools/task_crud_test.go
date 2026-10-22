@@ -80,7 +80,7 @@ func (f *fakeCRUD) handler(w http.ResponseWriter, r *http.Request) {
 			json.NewEncoder(w).Encode([]map[string]any{})
 			return
 		}
-		if sq := r.URL.Query().Get("s"); sq != "" {
+		if sq := r.URL.Query().Get("q"); sq != "" {
 			out := []map[string]any{}
 			for _, t := range f.filteredTasks(filter) {
 				if strings.Contains(t["title"].(string), sq) {
@@ -437,8 +437,12 @@ func (f *fakeCRUD) handler(w http.ResponseWriter, r *http.Request) {
 		f.moves = append(f.moves, b)
 		json.NewEncoder(w).Encode(map[string]any{"bucket_id": b["bucket_id"], "task_id": b["task_id"]})
 	case path == "/api/v2/teams" && r.Method == http.MethodGet:
-		q := r.URL.Query().Get("s")
+		q := r.URL.Query().Get("q")
 		out := []map[string]any{}
+		if f.teamsFake == nil {
+			json.NewEncoder(w).Encode(out)
+			return
+		}
 		for _, t := range f.teamsFake.teams {
 			if q == "" || strings.Contains(t["name"].(string), q) {
 				out = append(out, t)

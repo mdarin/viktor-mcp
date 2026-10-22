@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"viktor/internal/client"
 	"context"
 	"fmt"
 
@@ -31,7 +32,7 @@ func taskHasLabel(task map[string]any, labelID int) bool {
 func handleLabelList(r *Registry) mcp.ToolHandlerFor[LabelListIn, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, _ LabelListIn) (*mcp.CallToolResult, any, error) {
 		var labels []map[string]any
-		if err := r.api().ListLabels(ctx, &labels); err != nil {
+		if err := r.api().ListLabels(ctx, client.ListParams{}, &labels); err != nil {
 			return nil, nil, err
 		}
 		if labels == nil {

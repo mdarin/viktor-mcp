@@ -24,7 +24,7 @@ func (f *fakeShare) handler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	switch {
 	case r.Method == http.MethodGet && r.URL.Path == "/api/v2/users":
-		q := r.URL.Query().Get("s")
+		q := r.URL.Query().Get("q")
 		f.searchQueries = append(f.searchQueries, q)
 		var out []map[string]any
 		for _, u := range f.users {
@@ -40,8 +40,18 @@ func (f *fakeShare) handler(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPost && r.URL.Path == "/api/v2/projects/9/users":
 		var b map[string]any
 		json.NewDecoder(r.Body).Decode(&f.putBody)
+		// v2 body carries only username+permission; resolve id like the
+		// real server does.
+		uid := f.putBody["user_id"]
+		if uid == nil {
+			for _, u := range f.users {
+				if u["username"] == f.putBody["username"] {
+					uid = u["id"]
+				}
+			}
+		}
 		f.shared = append(f.shared, map[string]any{
-			"id":         f.putBody["user_id"],
+			"id":         uid,
 			"username":   f.putBody["username"],
 			"permission": f.putBody["permission"],
 		})
@@ -95,7 +105,14 @@ func callShare(t *testing.T, session *mcp.ClientSession, args map[string]any) (m
 		return nil, err
 	}
 	if res.IsError {
-		return nil, fmt.Errorf("tool error: %v", res.Content)
+		return nil, fmt.Errorf("tool error: %s", func() string {
+			for _, c := range res.Content {
+				if tc, ok := c.(*mcp.TextContent); ok {
+					return tc.Text
+				}
+			}
+			return fmt.Sprint(res.Content)
+		}())
 	}
 	out, _ := json.Marshal(res.StructuredContent)
 	var m map[string]any
@@ -111,8 +128,8 @@ func TestShareUsernameOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if f.putBody["user_id"] != float64(2) {
-		t.Errorf("user_id must be resolved: %v", f.putBody)
+	if _, sent := f.putBody["user_id"]; sent {
+		t.Errorf("v2 share body must not carry user_id: %v", f.putBody)
 	}
 	if f.putBody["username"] != "crewai-agent" {
 		t.Errorf("username must be sent: %v", f.putBody)

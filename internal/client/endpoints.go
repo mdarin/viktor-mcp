@@ -35,11 +35,11 @@ type ListParams struct {
 
 func (p ListParams) options() ListOptions {
 	return ListOptions{
+		Search:  p.Search,
 		Page:    p.Page,
 		PerPage: p.PerPage,
 		Limit:   p.Limit,
 		Extra: map[string]string{
-			"s":        p.Search,
 			"filter":   p.Filter,
 			"sort_by":  p.SortBy,
 			"order_by": p.OrderBy,
@@ -68,11 +68,18 @@ func (c *Client) DeleteProject(ctx context.Context, projectID int) error {
 }
 
 func (c *Client) ShareProject(ctx context.Context, projectID int, body, out any) error {
+	if c.api == "v2" {
+		// v2 ProjectUser schema: username + permission only.
+		if m, ok := body.(map[string]any); ok {
+			body = map[string]any{"username": m["username"], "permission": m["permission"]}
+		}
+		return c.Post(ctx, url("/projects/%d/users", projectID), body, out)
+	}
 	return c.createVerb(ctx, url("/projects/%d/users", projectID), body, out)
 }
 
 func (c *Client) ProjectUsers(ctx context.Context, projectID int, out any) error {
-	return c.Get(ctx, url("/projects/%d/users", projectID), nil, out)
+	return c.List(ctx, url("/projects/%d/users", projectID), ListOptions{PerPage: 50}, out)
 }
 
 func (c *Client) ShareProjectTeam(ctx context.Context, projectID int, body, out any) error {
@@ -80,7 +87,7 @@ func (c *Client) ShareProjectTeam(ctx context.Context, projectID int, body, out 
 }
 
 func (c *Client) ProjectTeams(ctx context.Context, projectID int, out any) error {
-	return c.Get(ctx, url("/projects/%d/teams", projectID), nil, out)
+	return c.List(ctx, url("/projects/%d/teams", projectID), ListOptions{PerPage: 50}, out)
 }
 
 func (c *Client) UnshareProjectTeam(ctx context.Context, projectID, teamID int) error {
@@ -298,8 +305,8 @@ type Label struct {
 	Title string `json:"title"`
 }
 
-func (c *Client) ListLabels(ctx context.Context, out any) error {
-	return c.List(ctx, "/labels", ListOptions{}, out)
+func (c *Client) ListLabels(ctx context.Context, p ListParams, out any) error {
+	return c.List(ctx, "/labels", p.options(), out)
 }
 
 func (c *Client) CreateLabel(ctx context.Context, body, out any) error {
@@ -344,9 +351,11 @@ type User struct {
 }
 
 func (c *Client) SearchUsers(ctx context.Context, s string, out any) error {
-	return c.Get(ctx, "/users", map[string]string{"s": s}, out)
+	return c.List(ctx, "/users", ListParams{Search: s, PerPage: 50}.options(), out)
 }
 
+// SearchAll searches globally. Vikunja removed /search in v2; callers on
+// v2 should compose ListProjects/ListTasks instead.
 func (c *Client) SearchAll(ctx context.Context, s string, out any) error {
 	return c.Get(ctx, "/search", map[string]string{"s": s}, out)
 }
@@ -375,11 +384,7 @@ type TeamMember struct {
 }
 
 func (c *Client) ListTeams(ctx context.Context, query string, out any) error {
-	var queryMap map[string]string
-	if query != "" {
-		queryMap = map[string]string{"s": query}
-	}
-	return c.Get(ctx, "/teams", queryMap, out)
+	return c.List(ctx, "/teams", ListParams{Search: query, PerPage: 50}.options(), out)
 }
 
 func (c *Client) GetTeam(ctx context.Context, teamID int, out any) error {

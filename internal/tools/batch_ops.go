@@ -15,7 +15,7 @@ import (
 func resolveLabels(ctx context.Context, r *Registry, names []string, createMissing bool) (map[string]int, error) {
 	byName := map[string]int{}
 	var existing []map[string]any
-	if err := r.api().ListLabels(ctx, &existing); err != nil {
+	if err := r.api().ListLabels(ctx, client.ListParams{}, &existing); err != nil {
 		return nil, err
 	}
 	for _, l := range existing {
@@ -409,7 +409,7 @@ func handleBatchCreateLabels(r *Registry) mcp.ToolHandlerFor[BatchCreateLabelsIn
 			return nil, nil, fmt.Errorf("labels must not be empty")
 		}
 		var existing []map[string]any
-		if err := r.api().ListLabels(ctx, &existing); err != nil {
+		if err := r.api().ListLabels(ctx, client.ListParams{}, &existing); err != nil {
 			return nil, nil, err
 		}
 		byName := map[string]bool{}

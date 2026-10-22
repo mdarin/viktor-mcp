@@ -3,7 +3,6 @@ package tools
 import (
 	"context"
 	"fmt"
-	neturl "net/url"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -45,19 +44,19 @@ func handleSearchAll(r *Registry) mcp.ToolHandlerFor[SearchAllIn, any] {
 		var pErr, tErr, lErr, teamErr error
 		g, gctx := errgroup.WithContext(ctx)
 		g.Go(func() error {
-			pErr = r.api().Get(gctx, fmt.Sprintf("/projects?s=%s", neturl.QueryEscape(in.Query)), nil, &projects)
+			pErr = r.api().ListProjects(gctx, client.ListParams{Search: in.Query}, &projects)
 			return nil
 		})
 		g.Go(func() error {
-			tErr = r.api().Get(gctx, fmt.Sprintf("/tasks?s=%s", neturl.QueryEscape(in.Query)), nil, &tasks)
+			tErr = r.api().ListTasks(gctx, client.ListParams{Search: in.Query}, &tasks)
 			return nil
 		})
 		g.Go(func() error {
-			lErr = r.api().Get(gctx, fmt.Sprintf("/labels?s=%s", neturl.QueryEscape(in.Query)), nil, &labels)
+			lErr = r.api().ListLabels(gctx, client.ListParams{Search: in.Query}, &labels)
 			return nil
 		})
 		g.Go(func() error {
-			teamErr = r.api().Get(gctx, fmt.Sprintf("/teams?s=%s", neturl.QueryEscape(in.Query)), nil, &teams)
+			teamErr = r.api().ListTeams(gctx, in.Query, &teams)
 			return nil
 		})
 		if err := g.Wait(); err != nil {
