@@ -167,8 +167,13 @@ func TestLoadTimeoutNumberIsActionable(t *testing.T) {
 func TestLoadInstanceTimeoutNumberNamesField(t *testing.T) {
 	path := writeCfg(t, `{"instances": {"default": {"url": "http://x", "token": "tk", "timeout": 5}}}`)
 	_, err := load(env(), path, nil)
-	if err == nil || !strings.Contains(err.Error(), `"instances.default.timeout"`) {
-		t.Errorf("want field-named error, got %v", err)
+	if err == nil {
+		t.Fatal("want error for numeric instances timeout")
+	}
+	// The exact JSON path varies across Go versions (map keys appear in
+	// the error context from go1.26+): assert the stable parts.
+	if !strings.Contains(err.Error(), "timeout") || !strings.Contains(err.Error(), "duration string") {
+		t.Errorf("want field-named duration error, got %v", err)
 	}
 }
 
