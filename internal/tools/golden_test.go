@@ -90,10 +90,10 @@ func TestGoldenSnapshot(t *testing.T) {
 
 	want, err := os.ReadFile(golden)
 	if err != nil {
-		t.Fatalf("missing snapshot, run: go test ./internal/tools -update-snapshot: %v", err)
+		t.Fatalf("missing snapshot, run: make surface-update: %v", err)
 	}
 	if string(want) != string(surface) {
-		t.Errorf("tool surface drifted from snapshot; run: go test ./internal/tools -update-snapshot")
+		t.Errorf("tool surface drifted from snapshot; run: make surface-update (regenerates golden.json, README table and counters)")
 	}
 }
 

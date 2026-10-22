@@ -27,5 +27,8 @@ jobs:
       - name: Test
         run: go test -race -count=1 ./...
 
+      - name: Surface check (golden.json / README tools table drift)
+        run: make surface-check
+
       - name: Build
         run: go build -trimpath -ldflags "-s -w" -o bin/viktor ./cmd/viktor
