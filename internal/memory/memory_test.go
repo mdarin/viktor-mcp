@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -123,6 +124,15 @@ func (s *fakeStore) DeletePoints(ctx context.Context, name string, ids []uint64)
 
 func (s *fakeStore) Count(ctx context.Context, name string) (int64, error) {
 	return int64(len(s.points)), nil
+}
+
+func (s *fakeStore) ScrollAll(ctx context.Context, name string) ([]Point, error) {
+	var out []Point
+	for id, payload := range s.points {
+		out = append(out, Point{ID: id, Payload: payload})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out, nil
 }
 
 func newTestIndexer(t *testing.T, src TaskSource, emb Embedder, st VectorStore, git GitEnricher) (*Indexer, string) {
@@ -297,7 +307,7 @@ func TestSyncDimensionMismatchFailFast(t *testing.T) {
 	src := &fakeSource{tasks: []Task{{ID: 1, Title: "x", Updated: "2026-10-20T10:00:00Z"}}}
 	st := newFakeStore()
 	st.exists = true
-	st.dim = 1024 // e.g. a bge-m3 collection
+	st.dim = 1024                // e.g. a bge-m3 collection
 	emb := &fakeEmbedder{dim: 4} // ...but the configured model emits 4d
 	ix, sp := newTestIndexer(t, src, emb, st, nil)
 
@@ -798,5 +808,69 @@ func TestSyncIncrementalDeltaAndGhosts(t *testing.T) {
 	}
 	if rep4.Mode != "full" || rep4.Deleted != 1 || len(st.points) != 1 {
 		t.Fatalf("full rescan: %+v points=%d", rep4, len(st.points))
+	}
+}
+
+// --- doctor (card #837) ---
+
+func TestDoctorFindsOrphansDryRun(t *testing.T) {
+	st := newFakeStore()
+	st.points[101] = map[string]any{"task_id": float64(7), "chunk_type": "task", "title": "live"}
+	st.points[102] = map[string]any{"task_id": float64(9), "chunk_type": "task", "title": "orphan task"}
+	st.points[103] = map[string]any{"task_id": float64(9), "chunk_type": "comment", "snippet": "orphan comment"}
+	st.points[104] = map[string]any{"task_ids": []any{float64(9), float64(7)}, "chunk_type": "commit", "sha": "abc"}  // one live ref — keep
+	st.points[105] = map[string]any{"task_ids": []any{float64(9), float64(12)}, "chunk_type": "commit", "sha": "def"} // all gone — orphan
+	st.points[106] = map[string]any{"chunk_type": "commit", "sha": "eee"}                                             // no join key — keep
+
+	src := &fakeSource{tasks: []Task{{ID: 7, Title: "live"}}}
+	ix, _ := newTestIndexer(t, src, &fakeEmbedder{}, st, nil)
+
+	rep, err := ix.Doctor(context.Background(), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.DryRun != true || rep.TotalPoints != 6 || rep.OrphanPoints != 3 {
+		t.Fatalf("dry run: %+v", rep)
+	}
+	if rep.ByChunkType["task"] != 1 || rep.ByChunkType["comment"] != 1 || rep.ByChunkType["commit"] != 1 {
+		t.Fatalf("by_chunk_type: %+v", rep.ByChunkType)
+	}
+	if len(rep.Samples) != 3 || rep.Deleted != 0 || len(st.points) != 6 {
+		t.Fatalf("dry run must not delete: %+v points=%d", rep, len(st.points))
+	}
+}
+
+func TestDoctorPruneDeletesExactlyOrphans(t *testing.T) {
+	st := newFakeStore()
+	st.points[201] = map[string]any{"task_id": float64(7), "chunk_type": "task"}
+	st.points[202] = map[string]any{"task_id": float64(9), "chunk_type": "comment"}
+	st.points[203] = map[string]any{"task_id": float64(11), "chunk_type": "task"}
+
+	src := &fakeSource{tasks: []Task{{ID: 7}, {ID: 11}}}
+	ix, _ := newTestIndexer(t, src, &fakeEmbedder{}, st, nil)
+
+	rep, err := ix.Doctor(context.Background(), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Deleted != 1 || rep.OrphanPoints != 1 {
+		t.Fatalf("prune: %+v", rep)
+	}
+	if _, ok := st.points[202]; ok {
+		t.Fatal("orphan point 202 still present after prune")
+	}
+	if len(st.points) != 2 {
+		t.Fatalf("healthy points touched: %v", st.points)
+	}
+}
+
+func TestDoctorEmptyCollection(t *testing.T) {
+	ix, _ := newTestIndexer(t, &fakeSource{}, &fakeEmbedder{}, newFakeStore(), nil)
+	rep, err := ix.Doctor(context.Background(), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.TotalPoints != 0 || rep.OrphanPoints != 0 {
+		t.Fatalf("empty: %+v", rep)
 	}
 }

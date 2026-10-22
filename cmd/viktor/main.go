@@ -77,15 +77,19 @@ func runMemory(ctx context.Context, args []string) error {
 	collection := fs.String("collection", envOr("VIKTOR_MEMORY_COLLECTION", "viktor_tasks"), "Qdrant collection")
 	repo := fs.String("repo", os.Getenv("VIKTOR_MEMORY_GIT_REPO"), "path to git repo to index (default: current directory; per-instance option)")
 	status := fs.Bool("status", false, "print index status and exit")
+	doctor := fs.Bool("doctor", false, "sweep the collection for orphan points and print a report (card #837)")
+	prune := fs.Bool("prune", false, "with -doctor: delete the orphan points found (default: dry run)")
 	// Strip a leading subcommand so flags after it still parse:
 	// `viktor memory sync -full` (Go's flag stops at the first
 	// positional argument).
-	if len(args) > 0 && (args[0] == "sync" || args[0] == "status") {
+	if len(args) > 0 && (args[0] == "sync" || args[0] == "status" || args[0] == "doctor") {
 		switch args[0] {
 		case "sync":
 			*sync = true
 		case "status":
 			*status = true
+		case "doctor":
+			*doctor = true
 		}
 		args = args[1:]
 	}
@@ -95,8 +99,8 @@ func runMemory(ctx context.Context, args []string) error {
 	if fs.NArg() > 0 {
 		return fmt.Errorf("unknown memory command %q", fs.Arg(0))
 	}
-	if !*sync && !*status {
-		return fmt.Errorf("usage: viktor memory sync|status [-full] [-instance NAME] [-repo PATH]")
+	if !*sync && !*status && !*doctor {
+		return fmt.Errorf("usage: viktor memory sync|status|doctor [-full] [-prune] [-instance NAME] [-repo PATH]")
 	}
 
 	cfg, err := config.Load()
@@ -184,6 +188,14 @@ func runMemory(ctx context.Context, args []string) error {
 			return err
 		}
 		return printJSON(st)
+	}
+
+	if *doctor {
+		rep, err := ix.Doctor(ctx, *prune)
+		if err != nil {
+			return err
+		}
+		return printJSON(rep)
 	}
 
 	var rep *memory.Report

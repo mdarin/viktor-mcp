@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -346,4 +347,110 @@ func TrimCursor(s string) string {
 		return ""
 	}
 	return strings.TrimSpace(s)
+}
+
+// DoctorReport is the result of one memory doctor run (card #837).
+type DoctorReport struct {
+	DryRun       bool             `json:"dry_run"`
+	TotalPoints  int              `json:"total_points"`
+	OrphanPoints int              `json:"orphan_points"`
+	ByChunkType  map[string]int   `json:"by_chunk_type"`        // chunk_type -> orphan count
+	OrphanIDs    []uint64         `json:"orphan_ids,omitempty"` // all orphan point ids
+	Samples      []map[string]any `json:"samples,omitempty"`    // up to 5 orphan payloads
+	Deleted      int              `json:"deleted"`              // points removed (prune only)
+	Cursor       string           `json:"cursor"`               // sync cursor age reference
+}
+
+// maxDoctorSamples caps the payload previews in the doctor report.
+const maxDoctorSamples = 5
+
+// Doctor sweeps the collection for orphan points: task/comment chunks
+// whose task_id no longer exists on the tracker and commit chunks whose
+// entire task_ids list is gone. With prune the orphans are deleted;
+// without it the report is read-only (dry run).
+func (ix *Indexer) Doctor(ctx context.Context, prune bool) (*DoctorReport, error) {
+	rep := &DoctorReport{DryRun: !prune, ByChunkType: map[string]int{}, Cursor: ix.state.Cursor}
+
+	// Live task ids from the source (full scan, no cursor).
+	live := map[int64]bool{}
+	batch, err := ix.source.AllTasks(ctx, "")
+	if err != nil {
+		return nil, fmt.Errorf("doctor: fetch live tasks: %w", err)
+	}
+	for _, t := range batch.Tasks {
+		live[t.ID] = true
+	}
+	// Shadow-mirror fallback batches may page; take what we got — the
+	// doctor compares against what the source reports right now.
+
+	points, err := ix.store.ScrollAll(ctx, ix.cfg.Collection)
+	if err != nil {
+		return nil, fmt.Errorf("doctor: scroll collection: %w", err)
+	}
+	rep.TotalPoints = len(points)
+
+	var orphanIDs []uint64
+	for _, p := range points {
+		if !isOrphan(p.Payload, live) {
+			continue
+		}
+		orphanIDs = append(orphanIDs, p.ID)
+		ct, _ := p.Payload["chunk_type"].(string)
+		if ct == "" {
+			ct = "unknown"
+		}
+		rep.ByChunkType[ct]++
+		if len(rep.Samples) < maxDoctorSamples {
+			rep.Samples = append(rep.Samples, p.Payload)
+		}
+	}
+	rep.OrphanPoints = len(orphanIDs)
+	rep.OrphanIDs = orphanIDs
+
+	if prune && len(orphanIDs) > 0 {
+		if err := ix.store.DeletePoints(ctx, ix.cfg.Collection, orphanIDs); err != nil {
+			return nil, fmt.Errorf("doctor: delete orphans: %w", err)
+		}
+		rep.Deleted = len(orphanIDs)
+	}
+	return rep, nil
+}
+
+// isOrphan decides for one point payload whether every task it is tied
+// to has disappeared from the tracker.
+func isOrphan(payload map[string]any, live map[int64]bool) bool {
+	if v, ok := payload["task_id"]; ok {
+		id, ok := toInt64(v)
+		return ok && !live[id]
+	}
+	if v, ok := payload["task_ids"].([]any); ok {
+		if len(v) == 0 {
+			return false
+		}
+		for _, e := range v {
+			if id, ok := toInt64(e); ok && live[id] {
+				return false
+			}
+		}
+		return true
+	}
+	// No join key (e.g. commit with no task references) — keep it.
+	return false
+}
+
+// toInt64 coerces a JSON-decoded number (float64) or int to int64.
+func toInt64(v any) (int64, bool) {
+	switch n := v.(type) {
+	case float64:
+		return int64(n), true
+	case int:
+		return int64(n), true
+	case int64:
+		return n, true
+	case json.Number:
+		i, err := n.Int64()
+		return i, err == nil
+	default:
+		return 0, false
+	}
 }

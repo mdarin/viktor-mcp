@@ -87,7 +87,7 @@ printf '%s\n%s\n%s\n' \
 ### Секция memory (опциональна)
 
 Семантическая память (ADR 0003): `memory_search`/`memory_status` и CLI
-`viktor memory sync|status`. Без секции инструменты отвечают
+`viktor memory sync|status|doctor`. Без секции инструменты отвечают
 `{supported:false}`, CLI — ошибку с подсказкой:
 
 ```json
@@ -188,7 +188,10 @@ Env-сокращение `VIKTOR_BOT_NAME`/`VIKTOR_BOT_TOKEN` (алиасы
    падает на старте с внятной ошибкой (см. `memory --status`), точек
    индекс не трогает.
 4. **Скрытые soft-delete**: удалённые задачи Vikunja скрывает из API,
-   но ghost-чанки остаются в индексе до `memory sync -full`.
+   но ghost-чанки остаются в индексе до `memory sync -full`. Диагностика
+   — `viktor memory doctor` (card #837): свипает коллекцию по живым
+   task_id, печатает сирот по chunk_type с примерами payload; удаление
+   — только с `-prune` (по умолчанию dry run): `viktor memory doctor -prune`.
 
 ## Подключение как MCP-сервер
 

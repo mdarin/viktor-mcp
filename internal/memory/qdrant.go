@@ -21,6 +21,9 @@ type VectorStore interface {
 	Upsert(ctx context.Context, name string, points []Point) error
 	DeletePoints(ctx context.Context, name string, ids []uint64) error
 	Count(ctx context.Context, name string) (int64, error)
+	// ScrollAll returns every point (ID + payload, no vectors) — the
+	// full-scan backing the memory doctor (card #837).
+	ScrollAll(ctx context.Context, name string) ([]Point, error)
 }
 
 // Point is one Qdrant point: deterministic ID, embedding, payload.
@@ -174,6 +177,44 @@ func (c *QdrantClient) Count(ctx context.Context, name string) (int64, error) {
 type SearchHit struct {
 	Score   float64        `json:"score"`
 	Payload map[string]any `json:"payload"`
+}
+
+type scrollBody struct {
+	Limit       int     `json:"limit"`
+	WithVector  bool    `json:"with_vector"`
+	WithPayload bool    `json:"with_payload"`
+	Offset      *uint64 `json:"offset,omitempty"`
+}
+
+type scrollResult struct {
+	Result struct {
+		Points []struct {
+			ID      uint64         `json:"id"`
+			Payload map[string]any `json:"payload"`
+		} `json:"points"`
+		NextPageOffset *uint64 `json:"next_page_offset"`
+	} `json:"result"`
+}
+
+// ScrollAll pages through the whole collection via the scroll API and
+// returns every point with its payload (vectors omitted).
+func (c *QdrantClient) ScrollAll(ctx context.Context, name string) ([]Point, error) {
+	var all []Point
+	var offset *uint64
+	for {
+		body := scrollBody{Limit: 256, WithVector: false, WithPayload: true, Offset: offset}
+		var out scrollResult
+		if err := c.do(ctx, http.MethodPost, "/collections/"+name+"/points/scroll", body, &out); err != nil {
+			return nil, err
+		}
+		for _, p := range out.Result.Points {
+			all = append(all, Point{ID: p.ID, Payload: p.Payload})
+		}
+		if out.Result.NextPageOffset == nil {
+			return all, nil
+		}
+		offset = out.Result.NextPageOffset
+	}
 }
 
 // SearchFilter is a Qdrant filter over point payloads (exported for
