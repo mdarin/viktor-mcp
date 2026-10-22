@@ -10,11 +10,23 @@ import (
 	"viktor/internal/shadow"
 )
 
+// TaskBatch is the result of one scan. Complete reports whether the
+// scan covered the whole board: only a complete scan may drive ghost
+// deletion, because on a filtered delta scan an absent task means
+// "unchanged", not "deleted" (card #821).
+type TaskBatch struct {
+	Tasks    []Task
+	Complete bool
+}
+
 // TaskSource abstracts where tasks come from: the live Vikunja API or the
 // shadow mirror when the tracker is unreachable (ADR 0003 fallback).
 type TaskSource interface {
-	// AllTasks returns every task across all projects.
-	AllTasks(ctx context.Context) ([]Task, error)
+	// AllTasks returns tasks across all projects. updatedSince is an
+	// RFC3339 instant; "" requests a full scan, non-empty asks the
+	// source to return only tasks updated at or after it. Sources that
+	// cannot filter return everything and mark the batch Complete.
+	AllTasks(ctx context.Context, updatedSince string) (TaskBatch, error)
 	// Comments returns the comments of one task.
 	Comments(ctx context.Context, taskID int64) ([]Comment, error)
 	// Name describes the source in the sync report.
@@ -34,13 +46,25 @@ func NewAPISource(api *client.Client) *APISource {
 // Name implements TaskSource.
 func (s *APISource) Name() string { return "api" }
 
-// AllTasks implements TaskSource.
-func (s *APISource) AllTasks(ctx context.Context) ([]Task, error) {
+// AllTasks implements TaskSource. With updatedSince set, the board is
+// fetched with the server-side filter `updated >= <since>` so an
+// incremental sync transfers only the delta (card #821). The window is
+// closed (`>=`, not `>`) to also cover tasks updated in the same second
+// as the cursor; unchanged chunks are skipped by hash comparison. If
+// the tracker rejects the filter, the unfiltered scan runs as fallback.
+func (s *APISource) AllTasks(ctx context.Context, updatedSince string) (TaskBatch, error) {
+	if updatedSince != "" {
+		var delta []Task
+		p := client.ListParams{Filter: "updated >= '" + updatedSince + "'"}
+		if err := s.api.ListTasks(ctx, p, &delta); err == nil {
+			return TaskBatch{Tasks: delta}, nil
+		}
+	}
 	var tasks []Task
 	if err := s.api.ListTasks(ctx, client.ListParams{}, &tasks); err != nil {
-		return nil, err
+		return TaskBatch{}, err
 	}
-	return tasks, nil
+	return TaskBatch{Tasks: tasks, Complete: true}, nil
 }
 
 // Comments implements TaskSource.
@@ -68,8 +92,9 @@ func NewShadowSource(store *shadow.Store) *ShadowSource {
 func (s *ShadowSource) Name() string { return "shadow-mirror" }
 
 // AllTasks implements TaskSource by loading every task snapshot from
-// every mirrored project.
-func (s *ShadowSource) AllTasks(_ context.Context) ([]Task, error) {
+// every mirrored project. The mirror cannot filter by update time, so
+// every scan is complete.
+func (s *ShadowSource) AllTasks(_ context.Context, _ string) (TaskBatch, error) {
 	var out []Task
 	for _, ref := range s.store.Projects() {
 		for _, snap := range s.store.TasksOfProject(ref) {
@@ -89,7 +114,7 @@ func (s *ShadowSource) AllTasks(_ context.Context) ([]Task, error) {
 			out = append(out, t)
 		}
 	}
-	return out, nil
+	return TaskBatch{Tasks: out, Complete: true}, nil
 }
 
 // Comments implements TaskSource: the mirror holds no comments.
@@ -122,15 +147,15 @@ type fallbackSource struct {
 func (s *fallbackSource) Name() string { return "api" }
 
 // AllTasks implements TaskSource with shadow fallback on ErrUnreachable.
-func (s *fallbackSource) AllTasks(ctx context.Context) ([]Task, error) {
-	tasks, err := s.api.AllTasks(ctx)
+func (s *fallbackSource) AllTasks(ctx context.Context, updatedSince string) (TaskBatch, error) {
+	batch, err := s.api.AllTasks(ctx, updatedSince)
 	if err == nil {
-		return tasks, nil
+		return batch, nil
 	}
 	if errors.Is(err, client.ErrUnreachable) {
-		return NewShadowSource(s.shadow).AllTasks(ctx)
+		return NewShadowSource(s.shadow).AllTasks(ctx, "")
 	}
-	return nil, err
+	return TaskBatch{}, err
 }
 
 // Comments implements TaskSource with shadow fallback on ErrUnreachable.

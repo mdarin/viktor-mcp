@@ -133,7 +133,9 @@ func handleMemoryStatus(r *Registry) mcp.ToolHandlerFor[MemoryStatusIn, any] {
 // nopSource exists only to satisfy NewIndexer for read-only status.
 type nopSource struct{}
 
-func (nopSource) AllTasks(context.Context) ([]memory.Task, error) { return nil, nil }
+func (nopSource) AllTasks(context.Context, string) (memory.TaskBatch, error) {
+	return memory.TaskBatch{Complete: true}, nil
+}
 func (nopSource) Comments(context.Context, int64) ([]memory.Comment, error) {
 	return nil, nil
 }

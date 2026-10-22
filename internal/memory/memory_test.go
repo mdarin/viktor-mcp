@@ -21,14 +21,28 @@ import (
 // --- test doubles ---
 
 type fakeSource struct {
-	tasks    []Task
-	comments map[int64][]Comment
-	calls    int
+	tasks     []Task
+	comments  map[int64][]Comment
+	calls     int
+	lastSince string
+	// sinceAware: when true, a non-empty since filters tasks by
+	// Updated > since and reports an incomplete batch, like the API.
+	sinceAware bool
 }
 
-func (s *fakeSource) AllTasks(ctx context.Context) ([]Task, error) {
+func (s *fakeSource) AllTasks(ctx context.Context, since string) (TaskBatch, error) {
 	s.calls++
-	return s.tasks, nil
+	s.lastSince = since
+	if s.sinceAware && since != "" {
+		var delta []Task
+		for _, t := range s.tasks {
+			if t.Updated > since {
+				delta = append(delta, t)
+			}
+		}
+		return TaskBatch{Tasks: delta}, nil
+	}
+	return TaskBatch{Tasks: s.tasks, Complete: true}, nil
 }
 
 func (s *fakeSource) Comments(ctx context.Context, taskID int64) ([]Comment, error) {
@@ -566,17 +580,143 @@ func TestShadowFallbackOnUnreachable(t *testing.T) {
 
 	dead := client.New("http://127.0.0.1:1", "tok", time.Second)
 	src := NewSource(dead, st)
-	tasks, err := src.AllTasks(context.Background())
+	batch, err := src.AllTasks(context.Background(), "")
 	if err != nil {
 		t.Fatalf("fallback must absorb unreachable: %v", err)
 	}
 	found := false
-	for _, tk := range tasks {
+	for _, tk := range batch.Tasks {
 		if tk.Title == "mirrored" {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("mirrored task not found: %+v", tasks)
+		t.Fatalf("mirrored task not found: %+v", batch.Tasks)
+	}
+	if !batch.Complete {
+		t.Fatal("shadow fallback scan must be complete")
+	}
+}
+
+// --- incremental fetch (card #821) ---
+
+func TestAPISourceCursorFilter(t *testing.T) {
+	var gotFilter string
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotFilter = r.URL.Query().Get("filter")
+		w.Header().Set("Content-Type", "application/json")
+		if page := r.URL.Query().Get("page"); page == "2" || page == "3" {
+			fmt.Fprint(w, `[]`)
+			return
+		}
+		switch {
+		case strings.Contains(gotFilter, "boom"):
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprint(w, `{"message":"invalid filter"}`)
+		case gotFilter != "":
+			// Delta answer.
+			fmt.Fprint(w, `[{"id":9,"title":"fresh","updated":"2026-10-22T12:00:00Z"}]`)
+		default:
+			fmt.Fprint(w, `[{"id":7,"title":"old"},{"id":8,"title":"older"}]`)
+		}
+	}))
+	defer srv.Close()
+
+	api := client.New(srv.URL, "tok", time.Second)
+	src := NewAPISource(api)
+
+	// Empty cursor → full scan, no filter.
+	batch, err := src.AllTasks(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !batch.Complete || len(batch.Tasks) != 2 || gotFilter != "" {
+		t.Fatalf("full scan: batch=%+v filter=%q", batch, gotFilter)
+	}
+
+	// Non-empty cursor → filtered delta, incomplete batch.
+	batch, err = src.AllTasks(context.Background(), "2026-10-22T10:00:00Z")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if batch.Complete {
+		t.Fatal("delta scan must not claim completeness")
+	}
+	if len(batch.Tasks) != 1 || batch.Tasks[0].ID != 9 {
+		t.Fatalf("delta scan tasks: %+v", batch.Tasks)
+	}
+	if !strings.Contains(gotFilter, "updated >= '2026-10-22T10:00:00Z'") {
+		t.Fatalf("filter param missing cursor: %q", gotFilter)
+	}
+	if gotPath != "/api/v2/tasks" {
+		t.Fatalf("unexpected path %q", gotPath)
+	}
+
+	// Rejected filter → fallback to the unfiltered full scan.
+	batch, err = src.AllTasks(context.Background(), "boom")
+	if err != nil {
+		t.Fatalf("filter error must fall back to full scan: %v", err)
+	}
+	if !batch.Complete || len(batch.Tasks) != 2 {
+		t.Fatalf("fallback scan: batch=%+v", batch)
+	}
+}
+
+func TestSyncIncrementalDeltaAndGhosts(t *testing.T) {
+	src := &fakeSource{sinceAware: true, tasks: []Task{
+		{ID: 1, Title: "alpha", Updated: "2026-10-20T10:00:00Z"},
+	}}
+	st := newFakeStore()
+	ix, _ := newTestIndexer(t, src, &fakeEmbedder{dim: 4}, st, nil)
+
+	rep, err := ix.Sync(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Mode != "full" || rep.TasksScanned != 1 || rep.Cursor != "2026-10-20T10:00:00Z" {
+		t.Fatalf("first sync: %+v", rep)
+	}
+
+	// Incremental pass with no changes: zero work, cursor preserved and
+	// reused as the since-window, no ghost deletion.
+	src.calls = 0
+	rep2, err := ix.Sync(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep2.Mode != "incremental" || rep2.TasksScanned != 0 || rep2.Upserted != 0 || rep2.Deleted != 0 {
+		t.Fatalf("no-op incremental: %+v", rep2)
+	}
+	if src.lastSince != "2026-10-20T10:00:00Z" {
+		t.Fatalf("cursor must be passed as since, got %q", src.lastSince)
+	}
+
+	// One changed task: only the delta is scanned and upserted; the old
+	// task was not part of the delta, yet its point must survive.
+	src.tasks = append(src.tasks, Task{ID: 2, Title: "beta", Updated: "2026-10-21T10:00:00Z"})
+	rep3, err := ix.Sync(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep3.Mode != "incremental" || rep3.TasksScanned != 1 || rep3.Upserted != 1 {
+		t.Fatalf("delta sync: %+v", rep3)
+	}
+	if rep3.Deleted != 0 || len(st.points) != 2 {
+		t.Fatalf("delta scan must not delete ghosts: deleted=%d points=%d", rep3.Deleted, len(st.points))
+	}
+	if rep3.Cursor != "2026-10-21T10:00:00Z" {
+		t.Fatalf("cursor must advance: %q", rep3.Cursor)
+	}
+
+	// Full rescan: complete scan removes the ghost of a vanished task.
+	src.tasks = []Task{{ID: 2, Title: "beta", Updated: "2026-10-21T10:00:00Z"}}
+	rep4, err := ix.SyncFull(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep4.Mode != "full" || rep4.Deleted != 1 || len(st.points) != 1 {
+		t.Fatalf("full rescan: %+v points=%d", rep4, len(st.points))
 	}
 }

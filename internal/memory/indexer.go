@@ -9,6 +9,7 @@ import (
 // Report summarizes one sync run.
 type Report struct {
 	Source       string `json:"source"`
+	Mode         string `json:"mode"` // "full" or "incremental" (card #821)
 	TasksScanned int    `json:"tasks_scanned"`
 	ChunksTotal  int    `json:"chunks_total"`
 	Upserted     int    `json:"upserted"`
@@ -57,19 +58,40 @@ func NewIndexer(cfg Config, source TaskSource, embedder Embedder, store VectorSt
 
 const embedBatch = 32
 
-// Sync performs one incremental pass: fetch tasks, chunk, embed only
-// changed chunks, upsert, delete points of vanished entities, persist
-// state. The repository history (when a git enricher is wired) is
-// indexed as commit chunks alongside the board (ADR 0003: task, comment
-// and commit chunks in one collection). A repeat sync with no changes
-// performs zero upserts (DoD).
+// Sync performs one incremental pass: fetch the tasks updated since the
+// stored cursor (full scan on first run), chunk, embed only changed
+// chunks, upsert, delete points of vanished entities, persist state. The
+// repository history (when a git enricher is wired) is indexed as commit
+// chunks alongside the board (ADR 0003: task, comment and commit chunks
+// in one collection). A repeat sync with no changes performs zero
+// upserts (DoD).
 func (ix *Indexer) Sync(ctx context.Context) (*Report, error) {
-	tasks, err := ix.source.AllTasks(ctx)
+	return ix.sync(ctx, false)
+}
+
+// SyncFull forces an unfiltered rescan of the whole board. Use it to
+// clean ghost points: a delta scan cannot see deleted tasks, so their
+// points are only removed on complete scans (card #821).
+func (ix *Indexer) SyncFull(ctx context.Context) (*Report, error) {
+	return ix.sync(ctx, true)
+}
+
+func (ix *Indexer) sync(ctx context.Context, full bool) (*Report, error) {
+	since := ""
+	if !full {
+		since = TrimCursor(ix.state.Cursor)
+	}
+	batch, err := ix.source.AllTasks(ctx, since)
 	if err != nil {
 		return nil, fmt.Errorf("memory: fetch tasks: %w", err)
 	}
+	tasks := batch.Tasks
 
-	report := &Report{Source: ix.source.Name(), TasksScanned: len(tasks)}
+	mode := "incremental"
+	if since == "" || batch.Complete {
+		mode = "full"
+	}
+	report := &Report{Source: ix.source.Name(), Mode: mode, TasksScanned: len(tasks)}
 
 	type pending struct {
 		chunk Chunk
@@ -78,7 +100,10 @@ func (ix *Indexer) Sync(ctx context.Context) (*Report, error) {
 	var pendingUpserts []pending
 	seenKeys := map[string]bool{}
 
-	cursor := ""
+	// Cursor advances monotonically: an incremental scan that returns
+	// nothing must keep the stored cursor, otherwise the next sync would
+	// silently degrade to a full scan.
+	cursor := TrimCursor(ix.state.Cursor)
 	for _, t := range tasks {
 		if t.Updated > cursor {
 			cursor = t.Updated
@@ -141,18 +166,22 @@ func (ix *Indexer) Sync(ctx context.Context) (*Report, error) {
 
 	// Points of tasks that disappeared from the scan are removed so the
 	// index never outlives the tracker (deleted tasks leave no ghosts).
-	var doomed []uint64
-	for key := range ix.state.Hashes {
-		if !seenKeys[key] {
-			doomed = append(doomed, pointID(ix.cfg.Instance, key))
-			delete(ix.state.Hashes, key)
+	// Only complete scans may delete: on a delta scan an absent task is
+	// "unchanged", not "deleted" — its point would be a false ghost.
+	if batch.Complete {
+		var doomed []uint64
+		for key := range ix.state.Hashes {
+			if !seenKeys[key] {
+				doomed = append(doomed, pointID(ix.cfg.Instance, key))
+				delete(ix.state.Hashes, key)
+			}
 		}
-	}
-	if len(doomed) > 0 {
-		if err := ix.store.DeletePoints(ctx, ix.cfg.Collection, doomed); err != nil {
-			return nil, fmt.Errorf("memory: delete stale points: %w", err)
+		if len(doomed) > 0 {
+			if err := ix.store.DeletePoints(ctx, ix.cfg.Collection, doomed); err != nil {
+				return nil, fmt.Errorf("memory: delete stale points: %w", err)
+			}
+			report.Deleted = len(doomed)
 		}
-		report.Deleted = len(doomed)
 	}
 
 	if len(pendingUpserts) > 0 {

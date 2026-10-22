@@ -64,6 +64,7 @@ func runMemory(ctx context.Context, args []string) error {
 	loadDotenv(".env")
 	fs := flag.NewFlagSet("memory", flag.ContinueOnError)
 	sync := fs.Bool("sync", false, "run one sync pass (primary operation)")
+	full := fs.Bool("full", false, "force a full rescan (also cleans ghost points)")
 	instance := fs.String("instance", "", "tracker instance name (default: config default)")
 	qdrant := fs.String("qdrant", envOr("VIKTOR_MEMORY_QDRANT_URL", "http://localhost:6333"), "Qdrant base URL")
 	ollama := fs.String("ollama", envOr("VIKTOR_MEMORY_OLLAMA_URL", "http://localhost:11434"), "Ollama base URL")
@@ -71,21 +72,26 @@ func runMemory(ctx context.Context, args []string) error {
 	collection := fs.String("collection", envOr("VIKTOR_MEMORY_COLLECTION", "viktor_tasks"), "Qdrant collection")
 	repo := fs.String("repo", os.Getenv("VIKTOR_MEMORY_GIT_REPO"), "path to git repo to index (default: current directory; per-instance option)")
 	status := fs.Bool("status", false, "print index status and exit")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if fs.NArg() > 0 {
-		switch fs.Arg(0) {
+	// Strip a leading subcommand so flags after it still parse:
+	// `viktor memory sync -full` (Go's flag stops at the first
+	// positional argument).
+	if len(args) > 0 && (args[0] == "sync" || args[0] == "status") {
+		switch args[0] {
 		case "sync":
 			*sync = true
 		case "status":
 			*status = true
-		default:
-			return fmt.Errorf("unknown memory command %q", fs.Arg(0))
 		}
+		args = args[1:]
+	}
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() > 0 {
+		return fmt.Errorf("unknown memory command %q", fs.Arg(0))
 	}
 	if !*sync && !*status {
-		return fmt.Errorf("usage: viktor memory sync|status [-instance NAME] [-repo PATH]")
+		return fmt.Errorf("usage: viktor memory sync|status [-full] [-instance NAME] [-repo PATH]")
 	}
 
 	cfg, err := config.Load()
@@ -175,7 +181,12 @@ func runMemory(ctx context.Context, args []string) error {
 		return printJSON(st)
 	}
 
-	rep, err := ix.Sync(ctx)
+	var rep *memory.Report
+	if *full {
+		rep, err = ix.SyncFull(ctx)
+	} else {
+		rep, err = ix.Sync(ctx)
+	}
 	if err != nil {
 		// Connection-level failure with an empty mirror is the one case
 		// where neither source can answer.
