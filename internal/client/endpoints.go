@@ -410,3 +410,59 @@ func (c *Client) AddTeamMember(ctx context.Context, teamID int, username string,
 func (c *Client) RemoveTeamMember(ctx context.Context, teamID int, username string) error {
 	return c.Delete(ctx, url("/teams/%d/members/%s", teamID, username))
 }
+
+// Bot Users and API tokens minted on behalf of a bot only exist in the
+// v2 API (introduced in Vikunja 2.7.x, card #616); v1 instances get an
+// explicit unsupported error instead of a 404 from a missing route.
+func (c *Client) v2Only(op string) error {
+	if c.api != "v2" {
+		return fmt.Errorf("%s requires api v2 (bot users are not available on v1 instances)", op)
+	}
+	return nil
+}
+
+type BotUser struct {
+	ID         int    `json:"id"`
+	Username   string `json:"username"`
+	Name       string `json:"name"`
+	BotOwnerID int    `json:"bot_owner_id"`
+	Status     int    `json:"status"`
+}
+
+func (c *Client) ListBots(ctx context.Context, out any) error {
+	if err := c.v2Only("bot_list"); err != nil {
+		return err
+	}
+	return c.List(ctx, "/user/bots", ListParams{PerPage: 50}.options(), out)
+}
+
+func (c *Client) CreateBot(ctx context.Context, body, out any) error {
+	if err := c.v2Only("bot_create"); err != nil {
+		return err
+	}
+	return c.createVerb(ctx, "/user/bots", body, out)
+}
+
+// UpdateBot patches a bot user; status 0=active, 2=disabled.
+func (c *Client) UpdateBot(ctx context.Context, botID int, body, out any) error {
+	if err := c.v2Only("bot update"); err != nil {
+		return err
+	}
+	return c.updateVerb(ctx, url("/user/bots/%d", botID), body, out)
+}
+
+func (c *Client) DeleteBot(ctx context.Context, botID int) error {
+	if err := c.v2Only("bot_delete"); err != nil {
+		return err
+	}
+	return c.Delete(ctx, url("/user/bots/%d", botID))
+}
+
+// CreateToken mints an API token; owner_id selects the bot the token
+// belongs to. The cleartext token is returned only in this response.
+func (c *Client) CreateToken(ctx context.Context, body, out any) error {
+	if err := c.v2Only("token mint"); err != nil {
+		return err
+	}
+	return c.createVerb(ctx, "/tokens", body, out)
+}

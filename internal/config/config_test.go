@@ -212,3 +212,81 @@ func TestLoadMemorySectionAbsent(t *testing.T) {
 		t.Fatal("nil section accessors must be zero")
 	}
 }
+
+func TestAgentTokenSelection(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	content := `{
+		"default_instance": "work",
+		"instances": {
+			"work": {"url": "http://w:1", "token": "tk_operator",
+				"agents": {"opencode": "tk_bot_opencode", "crewai": "tk_bot_crewai"}}
+		}
+	}`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := load(env("VIKUNJA_AGENT=opencode"), path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Agent != "opencode" {
+		t.Fatalf("agent = %q", cfg.Agent)
+	}
+	inst := cfg.Instances["work"]
+	if got := inst.TokenFor(cfg.Agent); got != "tk_bot_opencode" {
+		t.Errorf("TokenFor(opencode) = %q", got)
+	}
+	if got := inst.TokenFor("unknown-agent"); got != "tk_operator" {
+		t.Errorf("TokenFor(unknown) = %q, want operator fallback", got)
+	}
+	if got := inst.TokenFor(""); got != "tk_operator" {
+		t.Errorf("TokenFor(\"\") = %q, want operator token", got)
+	}
+
+	cfg2, err := load(env(), path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg2.Agent != "" {
+		t.Fatalf("agent without env = %q, want empty", cfg2.Agent)
+	}
+	if got := cfg2.Instances["work"].TokenFor(""); got != "tk_operator" {
+		t.Errorf("no agent configured: TokenFor = %q", got)
+	}
+}
+
+func TestApplyBotFromEnv(t *testing.T) {
+	cfg, err := load(env(
+		"VIKUNJA_URL=http://localhost:13456", "VIKUNJA_TOKEN=tk_operator",
+		"VIKTOR_BOT_NAME=bot-viktor-mcp", "VIKTOR_BOT_TOKEN=tk_bot_secret",
+	), "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Agent != "" {
+		t.Fatalf("agent = %q, want empty: bot identity is never auto-selected", cfg.Agent)
+	}
+	inst := cfg.Instances["default"]
+	if got := inst.TokenFor("bot-viktor-mcp"); got != "tk_bot_secret" {
+		t.Errorf("TokenFor(bot) = %q", got)
+	}
+	if got := inst.TokenFor(""); got != "tk_operator" {
+		t.Errorf("operator token = %q", got)
+	}
+
+	// Explicit VIKUNJA_AGENT wins over the bot default.
+	cfg2, err := load(env(
+		"VIKUNJA_URL=http://localhost:13456", "VIKUNJA_TOKEN=tk_operator",
+		"VIKTOR_BOT_NAME=bot-x", "VIKTOR_BOT_TOKEN=tk_bot",
+		"VIKUNJA_AGENT=crewai-agent",
+	), "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg2.Agent != "crewai-agent" {
+		t.Fatalf("agent = %q, explicit VIKUNJA_AGENT must win", cfg2.Agent)
+	}
+	if got := cfg2.Instances["default"].TokenFor(cfg2.Agent); got != "tk_operator" {
+		t.Errorf("TokenFor(crewai-agent) = %q, want operator fallback", got)
+	}
+}

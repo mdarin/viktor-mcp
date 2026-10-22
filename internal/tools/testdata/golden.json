@@ -413,6 +413,103 @@
     "name": "batch_update_tasks"
   },
   {
+    "description": "Create a bot user (username must start with 'bot-')",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "email": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "username"
+      ],
+      "type": "object"
+    },
+    "name": "bot_create"
+  },
+  {
+    "description": "Delete a bot user permanently",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "bot_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "bot_id"
+      ],
+      "type": "object"
+    },
+    "name": "bot_delete"
+  },
+  {
+    "description": "Disable a bot user (status=2); revokes its tokens' access immediately",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "bot_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "bot_id"
+      ],
+      "type": "object"
+    },
+    "name": "bot_disable"
+  },
+  {
+    "description": "List bot users owned by the authenticated operator",
+    "inputSchema": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "name": "bot_list"
+  },
+  {
+    "description": "Mint a long-lived API token for a bot user (returned once)",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "bot_id": {
+          "type": "integer"
+        },
+        "expires_in_days": {
+          "type": "integer"
+        },
+        "permissions": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "type": "object"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "bot_id",
+        "title"
+      ],
+      "type": "object"
+    },
+    "name": "bot_token_create"
+  },
+  {
     "description": "Add an event to the calendar by creating a labeled task",
     "inputSchema": {
       "additionalProperties": false,

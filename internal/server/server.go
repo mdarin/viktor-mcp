@@ -50,7 +50,7 @@ func Build(_ context.Context, stdout io.Writer) (*mcp.Server, *tools.Registry, e
 	clients := make(map[string]*client.Client, len(cfg.Instances))
 	var active *client.Client
 	for name, inst := range cfg.Instances {
-		c := client.NewWithAPI(inst.URL, inst.Token, inst.Timeout, inst.API).SetRateLimit(inst.RateLimit)
+		c := client.NewWithAPI(inst.URL, inst.TokenFor(cfg.Agent), inst.Timeout, inst.API).SetRateLimit(inst.RateLimit)
 		clients[name] = c
 		if name == cfg.DefaultInstance {
 			active = c

@@ -236,6 +236,7 @@ func (r *Registry) RegisterAll() {
 	registerCalendar(r)
 	registerAssign(r)
 	registerTeams(r)
+	registerBots(r)
 	registerMemory(r)
 	registerFsm(r)
 	registerWatchdog(r)

@@ -23,6 +23,22 @@ type Instance struct {
 	// API is the URL prefix version: "v2" (default) or "v1" rollback
 	// for legacy instances (card #59).
 	API string
+	// Agents maps agent identity (opencode, crewai, ...) to that
+	// agent's bot token on this instance (card #616). The human
+	// operator's Token stays the admin path for bot_* management.
+	Agents map[string]string
+}
+
+// TokenFor resolves the token for an agent identity: the per-agent bot
+// token when configured, otherwise the operator token. An empty agent
+// name means the operator identity.
+func (i *Instance) TokenFor(agent string) string {
+	if agent != "" && i.Agents != nil {
+		if t, ok := i.Agents[agent]; ok && t != "" {
+			return t
+		}
+	}
+	return i.Token
 }
 
 // MemorySection is the semantic memory layer configuration (ADR 0003).
@@ -93,6 +109,9 @@ type Config struct {
 	DefaultInstance string
 	Instances       map[string]*Instance
 	Memory          *MemorySection
+	// Agent is the identity this server run serves (env VIKUNJA_AGENT);
+	// empty means the operator token is used everywhere.
+	Agent string
 }
 
 type fileConfig struct {
@@ -111,11 +130,12 @@ type fileMemoryIn struct {
 }
 
 type fileInstanceIn struct {
-	URL       string  `json:"url"`
-	Token     string  `json:"token"`
-	Timeout   string  `json:"timeout"`
-	RateLimit float64 `json:"rate_limit"`
-	API       string  `json:"api_version"`
+	URL       string            `json:"url"`
+	Token     string            `json:"token"`
+	Timeout   string            `json:"timeout"`
+	RateLimit float64           `json:"rate_limit"`
+	API       string            `json:"api_version"`
+	Agents    map[string]string `json:"agents"`
 }
 
 func DefaultPath() string {
@@ -164,6 +184,7 @@ func load(env []string, path string, warn io.Writer) (*Config, error) {
 	}
 
 	cfg.pickDefault()
+	cfg.applyBot(envVals)
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
@@ -204,7 +225,7 @@ func (c *Config) applyFile(fc *fileConfig) error {
 	sort.Strings(names)
 	for _, name := range names {
 		fi := fc.Instances[name]
-		inst := &Instance{URL: strings.TrimRight(fi.URL, "/"), Token: fi.Token, RateLimit: fi.RateLimit, API: fi.API}
+		inst := &Instance{URL: strings.TrimRight(fi.URL, "/"), Token: fi.Token, RateLimit: fi.RateLimit, API: fi.API, Agents: fi.Agents}
 		if fi.Timeout != "" {
 			d, err := time.ParseDuration(fi.Timeout)
 			if err != nil {
@@ -233,6 +254,9 @@ func (c *Config) applyFile(fc *fileConfig) error {
 func (c *Config) applyEnv(env map[string]string) error {
 	if v := env["VIKUNJA_DEFAULT_INSTANCE"]; v != "" {
 		c.DefaultInstance = v
+	}
+	if v := env["VIKUNJA_AGENT"]; v != "" {
+		c.Agent = strings.TrimSpace(v)
 	}
 	get := func(inst, key string) (string, bool) {
 		if inst == "default" {
@@ -301,6 +325,38 @@ func isValidEnvKey(key string) bool {
 		return true
 	}
 	return false
+}
+
+// applyBot wires the agent bot identity from the environment
+// (card #616): VIKTOR_BOT_NAME/VIKTOR_BOT_TOKEN (the .env convention,
+// VIKUNJA_BOT_* aliases accepted) register a per-instance bot token.
+// The identity is only registered, never auto-selected: maintenance
+// CLI paths (memory sync, watchdog) load the same .env and must keep
+// running under the operator token — a bot sees only its shared
+// projects, so an implicit switch would silently index an empty board.
+// Acting as the bot requires an explicit VIKUNJA_AGENT=<bot name>.
+func (c *Config) applyBot(env map[string]string) {
+	name := env["VIKTOR_BOT_NAME"]
+	tok := env["VIKTOR_BOT_TOKEN"]
+	if name == "" || tok == "" {
+		name = env["VIKUNJA_BOT_NAME"]
+		tok = env["VIKUNJA_BOT_TOKEN"]
+	}
+	if name == "" || tok == "" {
+		return
+	}
+	instName := c.DefaultInstance
+	if v := env["VIKUNJA_BOT_INSTANCE"]; v != "" {
+		instName = v
+	}
+	inst, ok := c.Instances[instName]
+	if !ok {
+		return
+	}
+	if inst.Agents == nil {
+		inst.Agents = map[string]string{}
+	}
+	inst.Agents[name] = tok
 }
 
 func (c *Config) pickDefault() {

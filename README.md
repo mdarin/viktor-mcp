@@ -17,7 +17,7 @@ cmd/viktor/          точка входа (stdio-сервер)
 internal/config/     конфигурация: env + JSON-файл, multi-instance, секреты
 internal/client/     REST-клиент Vikunja (auth, ретраи, rate-limit, читаемые ошибки, пагинация, NullTime)
 internal/scoring/    детерминированный scoring-движок (веса today_*; без LLM)
-internal/tools/      реестр MCP-инструментов: имя → схема → handler (94 namespaced)
+internal/tools/      реестр MCP-инструментов: имя → схема → handler (108 namespaced)
 internal/server/     сборка MCP-сервера, slog-наблюдаемость
 docs/adr/            архитектурные решения
 ```
@@ -117,8 +117,36 @@ CLI-приоритет: флаг > `VIKTOR_MEMORY_*` env > секция `memory`
 | `VIKUNJA_RATE_LIMIT`      | нет         | без лимита            | Запросов/сек на клиент (token bucket)      |
 | `VIKUNJA_TOOL_TIMEOUT`    | нет         | `60` (сек)            | Таймаут одного вызова инструмента          |
 | `VIKUNJA_LOG_LEVEL`       | нет         | `info`                | Уровень slog (JSON в stderr)               |
+| `VIKUNJA_AGENT`           | нет         | —                     | Идентичность из `agents` инстанса: сервер действует под её токеном |
+| `VIKTOR_BOT_NAME` / `VIKTOR_BOT_TOKEN` | нет | —        | Регистрация bot-токена на default-инстансе (алиасы `VIKUNJA_BOT_*`) |
 
 \* либо полный инстанс в файле конфигурации.
+
+### Bot-идентичность (card #616)
+
+Инструменты `bot_*` управляют bot-пользователями Vikunja и минтят им
+API-токены. Upstream исключает группы `user_*` и `tokens` из
+API-токен-авторизации, поэтому `bot_create`/`bot_delete`/`bot_token_create`
+работают только по JWT-сессии владельца бота (с API-токеном — 401).
+Полученный токен регистрируется в конфиге:
+
+```json
+{
+  "instances": {
+    "main": {
+      "url": "http://localhost:13456", "token": "tk_operator...",
+      "agents": {"bot-viktor-mcp": "tk_bot_..."}
+    }
+  }
+}
+```
+
+Env-сокращение `VIKTOR_BOT_NAME`/`VIKTOR_BOT_TOKEN` (алиасы
+`VIKUNJA_BOT_*`) регистрирует ту же запись на default-инстансе.
+Сервер никогда не выбирает bot-токен автоматически: без `VIKUNJA_AGENT`
+он действует под операторским `token`, с `VIKUNJA_AGENT=<имя из agents>`
+— под указанной идентичностью (bot-токен видит только расшаренные
+проекты). Шаринг проектов боту — обычными `project_share*`.
 
 Файл конфига с токенами должен иметь права `0600` — при более широких правах
 сервер предупреждает в stderr при старте. Токены никогда не попадают в логи;
@@ -195,6 +223,11 @@ go test ./internal/tools -update-snapshot
 | `batch_relabel` | Bulk update labels on multiple tasks |
 | `batch_reorder_tasks` | Set positions for multiple tasks in a view |
 | `batch_update_tasks` | Update multiple tasks at once |
+| `bot_create` | Create a bot user (username must start with 'bot-') |
+| `bot_delete` | Delete a bot user permanently |
+| `bot_disable` | Disable a bot user (status=2); revokes its tokens' access immediately |
+| `bot_list` | List bot users owned by the authenticated operator |
+| `bot_token_create` | Mint a long-lived API token for a bot user (returned once) |
 | `cal_add_event` | Add an event to the calendar by creating a labeled task |
 | `claim_task` | Atomically claim a task for in_progress work with request_id idempotency (FSM) |
 | `comment_add` | Add a comment to a task |

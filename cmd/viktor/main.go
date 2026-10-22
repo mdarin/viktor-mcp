@@ -48,6 +48,9 @@ func main() {
 		}
 	}
 
+	// The MCP serve path reads VIKTOR_* / VIKUNJA_* from .env too
+	// (bot identity, card #616); CLI subcommands load it themselves.
+	loadDotenv(".env")
 	if err := server.Run(ctx, os.Stderr); err != nil {
 		os.Exit(1)
 	}
@@ -153,7 +156,7 @@ func runMemory(ctx context.Context, args []string) error {
 		return fmt.Errorf("memory is not configured: add a \"memory\" section to %s (see .env.example) or set VIKTOR_MEMORY_* env / pass -qdrant/-ollama flags", config.DefaultPath())
 	}
 
-	api := client.NewWithAPI(inst.URL, inst.Token, inst.Timeout, inst.API).SetRateLimit(inst.RateLimit)
+	api := client.NewWithAPI(inst.URL, inst.TokenFor(cfg.Agent), inst.Timeout, inst.API).SetRateLimit(inst.RateLimit)
 	store, err := shadow.NewStore("", instName)
 	if err != nil {
 		return fmt.Errorf("shadow store: %w", err)
@@ -211,7 +214,7 @@ func runWatchdog(ctx context.Context, args []string) error {
 		return fmt.Errorf("instance %q is not configured", instName)
 	}
 
-	api := client.NewWithAPI(inst.URL, inst.Token, inst.Timeout, inst.API).SetRateLimit(inst.RateLimit)
+	api := client.NewWithAPI(inst.URL, inst.TokenFor(cfg.Agent), inst.Timeout, inst.API).SetRateLimit(inst.RateLimit)
 	store, err := fsmstate.Open(tools.DefaultFSMPath(instName))
 	if err != nil {
 		return fmt.Errorf("fsm store: %w", err)
@@ -277,7 +280,16 @@ func loadDotenv(path string) {
 			continue
 		}
 		k = strings.TrimSpace(k)
-		v = strings.Trim(strings.TrimSpace(v), `"'`)
+		v = strings.TrimSpace(v)
+		// Unquoted values may carry an inline comment; a quoted value
+		// keeps everything up to the closing quote.
+		if len(v) >= 2 && (v[0] == '"' || v[0] == '\'') && v[len(v)-1] == v[0] {
+			v = v[1 : len(v)-1]
+		} else if i := strings.Index(v, " #"); i >= 0 {
+			v = strings.TrimSpace(v[:i])
+		} else if strings.HasPrefix(v, "#") {
+			continue
+		}
 		if k == "" || os.Getenv(k) != "" {
 			continue
 		}
