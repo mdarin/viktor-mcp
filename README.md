@@ -297,6 +297,7 @@ go test ./internal/tools -update-snapshot
 | `project_update` | Update a project |
 | `search_all` | Search tasks and projects across instances |
 | `search_all_tasks` | List tasks across instances with filters |
+| `search_hybrid` | Hybrid search: exact task filtering plus top-K semantic hits from the memory index (source=memory); memory issues degrade to a note, never fail |
 | `shadow_clear` | Remove already-synced entries from the shadow journal |
 | `shadow_status` | Show shadow-mode state: online/offline, pending queue size, mirror root |
 | `shadow_sync` | Probe the tracker and report shadow-queue synchronization state |

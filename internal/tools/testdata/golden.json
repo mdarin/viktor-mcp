@@ -1454,6 +1454,37 @@
     "name": "search_all_tasks"
   },
   {
+    "description": "Hybrid search: exact task filtering plus top-K semantic hits from the memory index (source=memory); memory issues degrade to a note, never fail",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "include_completed": {
+          "type": "boolean"
+        },
+        "instance": {
+          "type": "string"
+        },
+        "limit": {
+          "type": "integer"
+        },
+        "project_id": {
+          "type": "integer"
+        },
+        "query": {
+          "type": "string"
+        },
+        "semantic_k": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "type": "object"
+    },
+    "name": "search_hybrid"
+  },
+  {
     "description": "Remove already-synced entries from the shadow journal",
     "inputSchema": {
       "additionalProperties": false,
