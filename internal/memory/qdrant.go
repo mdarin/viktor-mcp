@@ -14,6 +14,9 @@ import (
 // VectorStore is the subset of Qdrant the indexer needs.
 type VectorStore interface {
 	CollectionExists(ctx context.Context, name string) (bool, error)
+	// CollectionDim returns the vector size of an existing collection;
+	// found=false when the collection does not exist (card #822).
+	CollectionDim(ctx context.Context, name string) (int, bool, error)
 	CreateCollection(ctx context.Context, name string, dim int) error
 	Upsert(ctx context.Context, name string, points []Point) error
 	DeletePoints(ctx context.Context, name string, ids []uint64) error

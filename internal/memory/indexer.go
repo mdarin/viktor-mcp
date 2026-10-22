@@ -77,6 +77,9 @@ func (ix *Indexer) SyncFull(ctx context.Context) (*Report, error) {
 }
 
 func (ix *Indexer) sync(ctx context.Context, full bool) (*Report, error) {
+	if err := ix.checkDimension(ctx); err != nil {
+		return nil, err
+	}
 	since := ""
 	if !full {
 		since = TrimCursor(ix.state.Cursor)
@@ -228,6 +231,40 @@ func (ix *Indexer) sync(ctx context.Context, full bool) (*Report, error) {
 	return report, nil
 }
 
+// probeText is the fixed sample embedded once per sync to learn the
+// model's output dimension (card #822).
+const probeText = "memory dimension probe"
+
+// checkDimension fails fast when the embed model's output size does not
+// match the existing collection (card #822). Without the probe the
+// mismatch surfaced mid-run as an opaque Qdrant 400 "Vector dimension
+// error", after comments were fetched and partial work possibly done.
+// A missing collection is fine: ensureCollection creates it with the
+// probed dimension.
+func (ix *Indexer) checkDimension(ctx context.Context) error {
+	dim, found, err := ix.store.CollectionDim(ctx, ix.cfg.Collection)
+	if err != nil {
+		return fmt.Errorf("memory: read collection dim: %w", err)
+	}
+	if !found {
+		return nil
+	}
+	vectors, err := ix.embedder.Embed(ctx, ix.cfg.EmbedModel, []string{probeText})
+	if err != nil {
+		return fmt.Errorf("memory: embed probe: %w", err)
+	}
+	if len(vectors) == 0 || len(vectors[0]) == 0 {
+		return fmt.Errorf("memory: embedder returned empty vector")
+	}
+	modelDim := len(vectors[0])
+	if modelDim != dim {
+		return fmt.Errorf(
+			"memory: embed model %q produces dim %d, collection %q has dim %d — switch the embed model (VIKTOR_MEMORY_EMBED_MODEL / config memory.embed_model) or recreate the collection (drop it, then run `viktor memory sync -full`)",
+			ix.cfg.EmbedModel, modelDim, ix.cfg.Collection, dim)
+	}
+	return nil
+}
+
 // ensureCollection creates the collection on first upsert, deriving the
 // vector dimension from the embedder instead of hardcoding it.
 func (ix *Indexer) ensureCollection(ctx context.Context, sampleText string) error {
@@ -253,14 +290,20 @@ func (ix *Indexer) ensureCollection(ctx context.Context, sampleText string) erro
 
 // Status returns index freshness info for memory_status.
 type Status struct {
-	Collection string `json:"collection"`
-	Points     int64  `json:"points"`
-	Cursor     string `json:"cursor"`
-	EmbedModel string `json:"embed_model"`
-	State      string `json:"state"`
+	Collection    string `json:"collection"`
+	Points        int64  `json:"points"`
+	Cursor        string `json:"cursor"`
+	EmbedModel    string `json:"embed_model"`
+	State         string `json:"state"`
+	CollectionDim int    `json:"collection_dim,omitempty"` // 0 = no collection
+	DimVerdict    string `json:"dim_verdict,omitempty"`    // ok | mismatch | unknown
 }
 
-// Status reads the current index state.
+// Status reads the current index state. When the collection exists, it
+// also reports the dimension verdict: the configured embed model is
+// probed once and compared against the collection's vector size, so a
+// model/collection mismatch is visible before the next sync fails on it
+// (card #822).
 func (ix *Indexer) Status(ctx context.Context) (*Status, error) {
 	st := &Status{
 		Collection: ix.cfg.Collection,
@@ -276,6 +319,22 @@ func (ix *Indexer) Status(ctx context.Context) (*Status, error) {
 	}
 	if st.Cursor == "" && len(ix.state.Hashes) == 0 {
 		st.State = "not synced yet"
+	}
+	dim, found, err := ix.store.CollectionDim(ctx, ix.cfg.Collection)
+	if err != nil || !found {
+		return st, nil
+	}
+	st.CollectionDim = dim
+	vectors, err := ix.embedder.Embed(ctx, ix.cfg.EmbedModel, []string{probeText})
+	switch {
+	case err != nil:
+		st.DimVerdict = "unknown"
+	case len(vectors) == 0 || len(vectors[0]) == 0:
+		st.DimVerdict = "unknown"
+	case len(vectors[0]) == dim:
+		st.DimVerdict = "ok"
+	default:
+		st.DimVerdict = "mismatch"
 	}
 	return st, nil
 }

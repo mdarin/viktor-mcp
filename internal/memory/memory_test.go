@@ -52,13 +52,18 @@ func (s *fakeSource) Comments(ctx context.Context, taskID int64) ([]Comment, err
 func (s *fakeSource) Name() string { return "fake" }
 
 type fakeEmbedder struct {
-	dim   int
-	calls int
+	dim    int
+	calls  int
+	chunks int // embedded texts excluding the dim probe (card #822)
 }
 
 func (e *fakeEmbedder) Embed(ctx context.Context, model string, texts []string) ([][]float32, error) {
 	e.calls++
 	out := make([][]float32, len(texts))
+	if len(texts) == 1 && texts[0] == probeText {
+		return [][]float32{make([]float32, e.dim)}, nil
+	}
+	e.chunks += len(texts)
 	for i := range texts {
 		v := make([]float32, e.dim)
 		v[0] = float32(len(texts[i])%97) / 97
@@ -69,6 +74,7 @@ func (e *fakeEmbedder) Embed(ctx context.Context, model string, texts []string) 
 
 type fakeStore struct {
 	exists     bool
+	dim        int
 	points     map[uint64]map[string]any
 	upserts    int
 	deletes    int
@@ -82,9 +88,17 @@ func (s *fakeStore) CollectionExists(ctx context.Context, name string) (bool, er
 	return s.exists, nil
 }
 
+func (s *fakeStore) CollectionDim(ctx context.Context, name string) (int, bool, error) {
+	if !s.exists {
+		return 0, false, nil
+	}
+	return s.dim, true, nil
+}
+
 func (s *fakeStore) CreateCollection(ctx context.Context, name string, dim int) error {
 	s.created++
 	s.exists = true
+	s.dim = dim
 	return nil
 }
 
@@ -202,7 +216,7 @@ func TestSyncIdempotent(t *testing.T) {
 	if st.created != 1 {
 		t.Fatalf("collection must be created once, got %d", st.created)
 	}
-	firstEmbedCalls := emb.calls
+	firstEmbedChunks := emb.chunks
 
 	rep2, err := ix.Sync(context.Background())
 	if err != nil {
@@ -214,7 +228,7 @@ func TestSyncIdempotent(t *testing.T) {
 	if rep2.Skipped != 3 || rep2.ChunksTotal != 3 {
 		t.Fatalf("second sync report: %+v", rep2)
 	}
-	if emb.calls != firstEmbedCalls {
+	if emb.chunks != firstEmbedChunks {
 		t.Fatal("unchanged chunks must not be re-embedded")
 	}
 
@@ -274,6 +288,72 @@ func TestSyncFailedUpsertDoesNotPersistState(t *testing.T) {
 	}
 	if _, err := os.Stat(sp); err != nil {
 		t.Fatal("state file must exist after success")
+	}
+}
+
+// --- dimension mismatch fail-fast (card #822) ---
+
+func TestSyncDimensionMismatchFailFast(t *testing.T) {
+	src := &fakeSource{tasks: []Task{{ID: 1, Title: "x", Updated: "2026-10-20T10:00:00Z"}}}
+	st := newFakeStore()
+	st.exists = true
+	st.dim = 1024 // e.g. a bge-m3 collection
+	emb := &fakeEmbedder{dim: 4} // ...but the configured model emits 4d
+	ix, sp := newTestIndexer(t, src, emb, st, nil)
+
+	rep, err := ix.Sync(context.Background())
+	if err == nil {
+		t.Fatalf("mismatched dim must fail the sync, got %+v", rep)
+	}
+	for _, want := range []string{"produces dim 4", "has dim 1024", "recreate the collection"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %q must mention %q", err, want)
+		}
+	}
+	if st.upserts != 0 || st.deletes != 0 {
+		t.Fatalf("no writes allowed before the check: upserts=%d deletes=%d", st.upserts, st.deletes)
+	}
+	if len(ix.state.Hashes) != 0 {
+		t.Fatal("state must stay untouched on dim mismatch")
+	}
+	if _, err := os.Stat(sp); !os.IsNotExist(err) {
+		t.Fatal("state file must not be created on dim mismatch")
+	}
+
+	// Status reports the verdict instead of a silent ok.
+	stt, err := ix.Status(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stt.CollectionDim != 1024 || stt.DimVerdict != "mismatch" {
+		t.Fatalf("status must flag the mismatch: %+v", stt)
+	}
+}
+
+func TestSyncDimensionOkAndMissingCollection(t *testing.T) {
+	src := &fakeSource{tasks: []Task{{ID: 1, Title: "x"}}}
+
+	// Matching dims: sync proceeds.
+	st := newFakeStore()
+	st.exists = true
+	st.dim = 4
+	ix, _ := newTestIndexer(t, src, &fakeEmbedder{dim: 4}, st, nil)
+	if _, err := ix.Sync(context.Background()); err != nil {
+		t.Fatalf("matching dims must not fail: %v", err)
+	}
+
+	// Missing collection: no verdict, ensureCollection creates it later.
+	st2 := newFakeStore()
+	ix2, _ := newTestIndexer(t, src, &fakeEmbedder{dim: 4}, st2, nil)
+	if _, err := ix2.Sync(context.Background()); err != nil {
+		t.Fatalf("missing collection must not fail: %v", err)
+	}
+	stt, err := ix2.Status(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stt.CollectionDim != 4 || stt.DimVerdict != "ok" {
+		t.Fatalf("status after creation: %+v", stt)
 	}
 }
 
