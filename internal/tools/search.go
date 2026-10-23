@@ -163,6 +163,7 @@ type SearchHybridIn struct {
 	IncludeCompleted bool   `json:"include_completed,omitempty"`
 	Limit            int    `json:"limit,omitempty"`      // total rows, default 10, max 50
 	SemanticK        int    `json:"semantic_k,omitempty"` // memory top-K, default 5, max 10
+	Repo             string `json:"repo,omitempty"`       // chunk source repo stamp (card #843)
 	Instance         string `json:"instance,omitempty"`
 }
 
@@ -224,7 +225,7 @@ func handleSearchHybrid(r *Registry) mcp.ToolHandlerFor[SearchHybridIn, any] {
 			if err != nil {
 				semantic["note"] = "memory unavailable: " + err.Error()
 			} else {
-				hits, err := searcher.Search(ctx, in.Query, memory.SearchOpts{ProjectID: int64(in.ProjectID), K: k})
+				hits, err := searcher.Search(ctx, in.Query, memory.SearchOpts{ProjectID: int64(in.ProjectID), Repo: in.Repo, K: k})
 				if err != nil {
 					semantic["note"] = "memory unavailable: " + err.Error()
 				} else if len(hits) == 0 {

@@ -21,6 +21,7 @@ type MemorySearchIn struct {
 	Query     string `json:"query"`
 	ProjectID int    `json:"project_id,omitempty"`
 	Labels    string `json:"labels,omitempty"` // comma-separated, all must match
+	Repo      string `json:"repo,omitempty"`   // chunk source repo stamp (card #843)
 	K         int    `json:"k,omitempty"`
 	Instance  string `json:"instance,omitempty"`
 }
@@ -30,7 +31,7 @@ type MemoryStatusIn struct {
 }
 
 func registerMemory(r *Registry) {
-	add[MemorySearchIn](r, "memory_search", "Semantic search over project memory (Vikunja tasks, comments, repo commits). Use for 'why/зачем' questions and historical context; returns task_id/title/snippet/status/commits/chunk_type", handleMemorySearch(r))
+	add[MemorySearchIn](r, "memory_search", "Semantic search over project memory (Vikunja tasks, comments, repo commits). Use for 'why/зачем' questions and historical context; returns task_id/title/snippet/status/commits/chunk_type/repo; optional repo narrows to one indexed repo", handleMemorySearch(r))
 	add[MemoryStatusIn](r, "memory_status", "Semantic memory index status: points, cursor, embed model", handleMemoryStatus(r))
 }
 
@@ -82,7 +83,7 @@ func handleMemorySearch(r *Registry) mcp.ToolHandlerFor[MemorySearchIn, any] {
 		if err != nil {
 			return nil, nil, err
 		}
-		opts := memory.SearchOpts{ProjectID: int64(in.ProjectID), K: in.K}
+		opts := memory.SearchOpts{ProjectID: int64(in.ProjectID), Repo: in.Repo, K: in.K}
 		opts.Labels = append(opts.Labels, splitCSV(in.Labels)...)
 		hits, err := searcher.Search(ctx, in.Query, opts)
 		if err != nil {

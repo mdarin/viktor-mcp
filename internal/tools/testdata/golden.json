@@ -1168,7 +1168,7 @@
     "name": "label_list"
   },
   {
-    "description": "Semantic search over project memory (Vikunja tasks, comments, repo commits). Use for 'why/зачем' questions and historical context; returns task_id/title/snippet/status/commits/chunk_type",
+    "description": "Semantic search over project memory (Vikunja tasks, comments, repo commits). Use for 'why/зачем' questions and historical context; returns task_id/title/snippet/status/commits/chunk_type/repo; optional repo narrows to one indexed repo",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -1185,6 +1185,9 @@
           "type": "integer"
         },
         "query": {
+          "type": "string"
+        },
+        "repo": {
           "type": "string"
         }
       },
@@ -1505,6 +1508,9 @@
           "type": "integer"
         },
         "query": {
+          "type": "string"
+        },
+        "repo": {
           "type": "string"
         },
         "semantic_k": {

@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
 	"strings"
 	"testing"
+	"time"
 
 	"viktor/internal/memory"
 	"viktor/internal/shadow"

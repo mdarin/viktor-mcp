@@ -12,6 +12,7 @@ import (
 type SearchOpts struct {
 	ProjectID int64    // 0 = all projects
 	Labels    []string // all listed labels must match (payload.labels)
+	Repo      string   // payload repo stamp; empty = all repos (card #843)
 	K         int      // top-k, default 5
 }
 
@@ -28,6 +29,7 @@ type Hit struct {
 	SHA       string   `json:"sha,omitempty"`     // commit chunks
 	TaskIDs   []int64  `json:"task_ids,omitempty"`
 	ProjectID int64    `json:"project_id,omitempty"`
+	Repo      string   `json:"repo,omitempty"` // chunk source repo (card #843)
 }
 
 // Searcher answers semantic queries against the index. It is read-only:
@@ -69,11 +71,16 @@ func (s *Searcher) Search(ctx context.Context, query string, opts SearchOpts) ([
 		return nil, fmt.Errorf("memory: embedder returned no vector")
 	}
 	var filter *SearchFilter
-	if opts.ProjectID != 0 || len(opts.Labels) > 0 {
+	if opts.ProjectID != 0 || len(opts.Labels) > 0 || opts.Repo != "" {
 		filter = &SearchFilter{}
 		if opts.ProjectID != 0 {
 			filter.Must = append(filter.Must, map[string]any{
 				"key": "project_id", "match": map[string]any{"value": opts.ProjectID},
+			})
+		}
+		if opts.Repo != "" {
+			filter.Must = append(filter.Must, map[string]any{
+				"key": "repo", "match": map[string]any{"value": opts.Repo},
 			})
 		}
 		for _, l := range opts.Labels {
@@ -116,6 +123,7 @@ func toHit(h SearchHit) Hit {
 		return ""
 	}
 	out.TaskID = getInt("task_id")
+	out.Repo = getStr("repo")
 	if ct, ok := h.Payload["chunk_type"].(string); ok && ct != "" {
 		out.ChunkType = ct
 	}

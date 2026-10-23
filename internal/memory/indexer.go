@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -237,6 +238,9 @@ func (ix *Indexer) sync(ctx context.Context, full bool) (*Report, error) {
 			}
 			points := make([]Point, len(batch))
 			for i, p := range batch {
+				if ix.cfg.GitRepo != "" && p.chunk.Payload["repo"] == nil {
+					p.chunk.Payload["repo"] = filepath.Base(ix.cfg.GitRepo)
+				}
 				points[i] = Point{ID: p.id, Vector: vectors[i], Payload: p.chunk.Payload}
 			}
 			if err := ix.store.Upsert(ctx, ix.cfg.Collection, points); err != nil {
