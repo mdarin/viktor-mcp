@@ -419,7 +419,7 @@
     "name": "batch_update_tasks"
   },
   {
-    "description": "Check a project's kanban board against its profile (missing/extra columns, done bucket, counts)",
+    "description": "Check a project's kanban board against its profile (missing/extra columns, done bucket, counts); hygiene:true adds the tracker-git cross-check: done cards without a card #N commit and recent commits without a card reference (best-effort, dry-run)",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
