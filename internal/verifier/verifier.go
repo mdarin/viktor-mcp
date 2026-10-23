@@ -66,6 +66,10 @@ type VectorStore interface {
 	Upsert(ctx context.Context, name string, points []memory.Point) error
 	DeletePoints(ctx context.Context, name string, ids []uint64) error
 	SearchPoints(ctx context.Context, name string, vector []float32, k int, filter *memory.SearchFilter) ([]memory.SearchHit, error)
+	// ScrollAll lists every point in the collection; the verifier uses
+	// it best-effort to spot task chunks whose text already covers an
+	// anchor (card #838).
+	ScrollAll(ctx context.Context, name string) ([]memory.Point, error)
 }
 
 // TaskReader fetches the task to anchor.
@@ -143,6 +147,50 @@ func Anchors(title, description string) []string {
 	return out
 }
 
+// taskChunkTitles collects normalized titles of the task chunks
+// already indexed for the task. Any error yields an empty set, keeping
+// all anchors (the duplicate is cosmetic, a missing anchor is not).
+func (v *Verifier) taskChunkTitles(ctx context.Context, taskID int) map[string]bool {
+	out := map[string]bool{}
+	pts, err := v.Store.ScrollAll(ctx, v.Cfg.Collection)
+	if err != nil {
+		return out
+	}
+	for _, p := range pts {
+		if id, ok := payloadTaskID(p.Payload["task_id"]); !ok || id != taskID {
+			continue
+		}
+		if ct, _ := p.Payload["chunk_type"].(string); ct != "task" {
+			continue
+		}
+		if title, ok := p.Payload["title"].(string); ok {
+			out[normAnchorText(title)] = true
+		}
+	}
+	return out
+}
+
+// normAnchorText folds case, whitespace and border punctuation so a
+// title and its indexed copy compare equal despite markdown noise.
+func normAnchorText(s string) string {
+	s = strings.ToLower(strings.Join(strings.Fields(s), " "))
+	return strings.Trim(s, " \t.:!?,;:\u00ab\u00bb\"'`()*[]{}*_-")
+}
+
+func payloadTaskID(v any) (int, bool) {
+	switch n := v.(type) {
+	case int:
+		return n, true
+	case float64:
+		return int(n), true
+	case json.Number:
+		if i, err := n.Int64(); err == nil {
+			return int(i), true
+		}
+	}
+	return 0, false
+}
+
 // taskAnchors fetches the task and splits it into anchor texts.
 func (v *Verifier) taskAnchors(ctx context.Context, taskID int) ([]string, error) {
 	var task map[string]any
@@ -178,6 +226,13 @@ func (v *Verifier) ensureAnchorsVecs(ctx context.Context, taskID int, anchors []
 	if len(vecs) != len(anchors) {
 		return 0, fmt.Errorf("verifier: embedder returned %d vectors for %d anchors", len(vecs), len(anchors))
 	}
+
+	// Card #838: a title anchor whose text is already covered by the
+	// memory task chunk shows up twice in the search output with close
+	// scores — skip it. Best effort: if the collection can't be read,
+	// every anchor is stored as before.
+	dup := v.taskChunkTitles(ctx, taskID)
+
 	ok, err := v.Store.CollectionExists(ctx, v.Cfg.Collection)
 	if err != nil {
 		return 0, fmt.Errorf("verifier: qdrant: %w", err)
@@ -196,6 +251,9 @@ func (v *Verifier) ensureAnchorsVecs(ctx context.Context, taskID int, anchors []
 	}
 	points := make([]memory.Point, 0, len(anchors))
 	for i, vec := range vecs {
+		if dup[normAnchorText(anchors[i])] {
+			continue // textual duplicate of an indexed task chunk
+		}
 		points = append(points, memory.Point{
 			ID:      ids[i],
 			Vector:  vec,
@@ -205,7 +263,7 @@ func (v *Verifier) ensureAnchorsVecs(ctx context.Context, taskID int, anchors []
 	if err := v.Store.Upsert(ctx, v.Cfg.Collection, points); err != nil {
 		return 0, fmt.Errorf("verifier: upsert anchors: %w", err)
 	}
-	return len(anchors), nil
+	return len(points), nil
 }
 
 // Verify runs the hybrid check: embed the diff, search it against the

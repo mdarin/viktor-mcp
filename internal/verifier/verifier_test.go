@@ -73,6 +73,7 @@ type fakeStore struct {
 	exists  bool
 	points  map[uint64]memory.Point
 	failUps bool
+	scroll  []memory.Point // ScrollAll result, nil = empty
 }
 
 func (s *fakeStore) CollectionExists(_ context.Context, _ string) (bool, error) { return s.exists, nil }
@@ -100,6 +101,9 @@ func (s *fakeStore) DeletePoints(_ context.Context, _ string, ids []uint64) erro
 		delete(s.points, id)
 	}
 	return nil
+}
+func (s *fakeStore) ScrollAll(_ context.Context, _ string) ([]memory.Point, error) {
+	return s.scroll, nil
 }
 func (s *fakeStore) SearchPoints(_ context.Context, _ string, vector []float32, k int, _ *memory.SearchFilter) ([]memory.SearchHit, error) {
 	type scored struct {
@@ -498,5 +502,55 @@ func TestRepowiseRunnerParse(t *testing.T) {
 	d = RepowiseRunner{CLI: cli, Timeout: 10 * time.Second}.Run(context.Background(), "/repo", "abc..def")
 	if d.Status != "ok" || d.ReviewPriority != "low" {
 		t.Fatalf("args forwarding failed: %+v (%s)", d, d.Note)
+	}
+}
+
+// TestEnsureAnchorsSkipsTaskChunkDup (card #838): when the memory index
+// already carries a task chunk with the same title, the title anchor is
+// not stored — the search output no longer shows the same text twice.
+// The description anchors are kept, and the verdict logic is untouched.
+func TestEnsureAnchorsSkipsTaskChunkDup(t *testing.T) {
+	e := &fakeEmbedder{dim: 8}
+	st := &fakeStore{
+		scroll: []memory.Point{{ID: 1, Payload: map[string]any{
+			"task_id":    float64(501),
+			"chunk_type": "task",
+			// markdown noise + case must not defeat the comparison
+			"title": "  implement RETRY policy for http client  ",
+		}}},
+	}
+	v, _ := newTestVerifier(t, e, st, "diff about retry policy")
+	n, err := v.EnsureAnchors(context.Background(), 501)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 3 { // title skipped, three description anchors kept
+		t.Fatalf("anchors stored = %d, want 3 (title is a task-chunk dup)", n)
+	}
+	for _, p := range st.points {
+		if p.Payload["snippet"] == "Implement retry policy for HTTP client" {
+			t.Fatal("title anchor must not be stored")
+		}
+	}
+
+	// No task chunk for the task (ScrollAll empty/error path) → title
+	// anchor is stored as before.
+	st2 := &fakeStore{}
+	v2, _ := newTestVerifier(t, e, st2, "diff about retry policy")
+	n2, err := v2.EnsureAnchors(context.Background(), 501)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n2 != 4 {
+		t.Fatalf("without a task chunk all 4 anchors (title + 3 lines) must be stored, got %d", n2)
+	}
+	found := false
+	for _, p := range st2.points {
+		if p.Payload["snippet"] == "Implement retry policy for HTTP client" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("title anchor missing on the fallback path")
 	}
 }
