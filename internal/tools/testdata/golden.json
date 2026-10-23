@@ -423,6 +423,12 @@
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
+        "hygiene": {
+          "type": "boolean"
+        },
+        "hygiene_window_days": {
+          "type": "integer"
+        },
         "profile": {
           "items": {
             "type": "string"

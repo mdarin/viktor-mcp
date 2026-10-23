@@ -14,6 +14,7 @@ import (
 
 	"viktor/internal/client"
 	"viktor/internal/config"
+	"viktor/internal/memory"
 )
 
 type fakeKanban struct {
@@ -23,7 +24,14 @@ type fakeKanban struct {
 	buckets       map[int][]map[string]any
 	nextBucketID  int
 	nextViewID    int
+	// doneTasks answers GET /projects/9/tasks?filter=done = true for
+	// the board_audit hygiene mode (card #855).
+	doneTasks []map[string]any
 }
+
+// testMemoryCfgs, when set, is installed via SetMemoryConfigs by the
+// next newKanbanFixture call (used by the hygiene audit tests).
+var testMemoryCfgs map[string]memory.Config
 
 func newKanbanFixture(t *testing.T, boards ...*config.BoardSection) (*fakeKanban, *mcp.ClientSession) {
 	t.Helper()
@@ -42,6 +50,9 @@ func newKanbanFixture(t *testing.T, boards ...*config.BoardSection) (*fakeKanban
 	reg := NewRegistry(srvMCP, api)
 	for _, b := range boards {
 		reg.SetBoard(b)
+	}
+	if testMemoryCfgs != nil {
+		reg.SetMemoryConfigs(testMemoryCfgs)
 	}
 	reg.RegisterAll()
 
@@ -155,6 +166,16 @@ func (f *fakeKanban) handler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		json.NewEncoder(w).Encode(in)
+	case r.Method == http.MethodGet && r.URL.Path == "/api/v2/projects/9/tasks":
+		if strings.Contains(r.URL.Query().Get("filter"), "done = true") {
+			if p := r.URL.Query().Get("page"); p != "" && p != "1" {
+				json.NewEncoder(w).Encode([]any{})
+				return
+			}
+			json.NewEncoder(w).Encode(f.doneTasks)
+			return
+		}
+		http.Error(w, "unexpected task list filter", http.StatusBadRequest)
 	case r.Method == http.MethodGet && r.URL.Path == "/api/v2/projects/9/views/40/buckets/tasks":
 		if p := r.URL.Query().Get("page"); p != "" && p != "1" {
 			json.NewEncoder(w).Encode([]any{})
