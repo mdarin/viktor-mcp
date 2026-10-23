@@ -9,6 +9,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"viktor/internal/memory"
+	"viktor/internal/shadow"
 )
 
 // Memory tools (ADR 0003): read-only semantic projection of the tracker
@@ -112,7 +113,18 @@ func handleMemoryStatus(r *Registry) mcp.ToolHandlerFor[MemoryStatusIn, any] {
 		if instance == "" {
 			instance = "default"
 		}
-		ix, err := memory.NewIndexer(cfg, nopSource{}, memory.NewOllama(cfg.OllamaURL), memory.NewQdrant(cfg.QdrantURL, cfg.QdrantAPIKey), nil, memory.DefaultStatePath(instance))
+		// Doctor (ghost sweep) inside Status needs live task ids: a
+		// nopSource reports zero live tasks and flags every point as an
+		// orphan (QA follow-up, memory_status wave). Wire the real
+		// client + shadow store like the memory CLI does; fall back to
+		// nopSource only when no client is registered for the instance.
+		var src memory.TaskSource = nopSource{}
+		if api, aerr := r.clientFor(in.Instance); aerr == nil && api != nil {
+			if store, serr := shadow.NewStore("", instance); serr == nil {
+				src = memory.NewSource(api, store)
+			}
+		}
+		ix, err := memory.NewIndexer(cfg, src, memory.NewOllama(cfg.OllamaURL), memory.NewQdrant(cfg.QdrantURL, cfg.QdrantAPIKey), nil, memory.DefaultStatePath(instance))
 		if err != nil {
 			return nil, nil, err
 		}
@@ -121,12 +133,18 @@ func handleMemoryStatus(r *Registry) mcp.ToolHandlerFor[MemoryStatusIn, any] {
 			return nil, nil, fmt.Errorf("memory status: %w", err)
 		}
 		return nil, map[string]any{
-			"supported":   true,
-			"collection":  st.Collection,
-			"points":      st.Points,
-			"cursor":      st.Cursor,
-			"embed_model": st.EmbedModel,
-			"state":       st.State,
+			"supported":       true,
+			"collection":      st.Collection,
+			"points":          st.Points,
+			"cursor":          st.Cursor,
+			"embed_model":     st.EmbedModel,
+			"state":           st.State,
+			"collection_dim":  st.CollectionDim,
+			"dim_verdict":     st.DimVerdict,
+			"last_full_sync":  st.LastFullSync,
+			"full_sync_age":   st.FullSyncAge,
+			"full_sync_stale": st.FullSyncStale,
+			"ghosts":          st.Ghosts,
 		}, nil
 	}
 }

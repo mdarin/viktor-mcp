@@ -52,7 +52,14 @@ func handleBoardAudit(r *Registry) mcp.ToolHandlerFor[BoardAuditIn, any] {
 			title, _ := b["title"].(string)
 			have[strings.ToLower(title)] = true
 			tasks, _ := b["tasks"].([]any)
-			buckets = append(buckets, boardAuditBucket{ID: asInt(b["id"]), Title: title, Count: len(tasks)})
+			count := len(tasks)
+			// The board endpoint caps embedded tasks (default 50) but
+			// reports the real total in `count` — prefer it, otherwise
+			// done-buckets over 50 look drained (QA #848 wave).
+			if n, ok := b["count"].(float64); ok {
+				count = int(n)
+			}
+			buckets = append(buckets, boardAuditBucket{ID: asInt(b["id"]), Title: title, Count: count})
 		}
 		missing := []string{}
 		for _, t := range profile {
