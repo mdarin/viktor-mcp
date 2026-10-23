@@ -4,13 +4,19 @@ PKG := ./...
 GO := go
 COMPOSE := docker compose -f docker-compose.dev.yml
 
-.PHONY: build test lint fmt vet clean run ci install dev-up dev-down dev-logs dev-reset surface-update surface-check
+.PHONY: build test test-integration lint fmt vet clean run ci install dev-up dev-down dev-logs dev-reset surface-update surface-check
 
 build:
 	$(GO) build -trimpath -ldflags "-s -w" -o $(BIN_DIR)/$(BINARY) ./cmd/$(BINARY)
 
 test:
 	$(GO) test -race -count=1 $(PKG)
+
+# Card #844: live-Qdrant integration suite. Spins up a disposable
+# container, runs the suite, tears everything down.
+test-integration:
+	docker compose -f deploy/docker-compose.test.yml up -d --wait
+	@set +e; VIKTOR_QDRANT_TEST_URL=http://localhost:6333 $(GO) test -race -count=1 -run TestQdrantIntegration $(PKG); status=$$?; docker compose -f deploy/docker-compose.test.yml down -v; exit $$status
 
 lint:
 	golangci-lint run
