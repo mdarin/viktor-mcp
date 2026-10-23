@@ -276,11 +276,30 @@ func handleSearchHybrid(r *Registry) mcp.ToolHandlerFor[SearchHybridIn, any] {
 			row["source"] = "exact"
 			rows = append(rows, row)
 		}
-		rows = append(rows, memRows...)
+		// Merge ordering (card #841): strict-slots (default) keeps the
+		// exact half on top; memory-first promotes the semantic rows to
+		// the head. Slot quota is identical in both policies; a
+		// not-configured memory leaves the zero Config → strict.
+		policy := cfg.HybridPolicyOrDefault()
+		if policy == memory.HybridPolicyMemoryFirst {
+			ordered := make([]map[string]any, 0, len(memRows)+len(rows))
+			ordered = append(ordered, memRows...)
+			ordered = append(ordered, rows...)
+			rows = ordered
+		} else {
+			rows = append(rows, memRows...)
+		}
 		return nil, map[string]any{
-			"query":    in.Query,
-			"tasks":    rows,
-			"count":    len(rows),
+			"query": in.Query,
+			"tasks": rows,
+			"count": len(rows),
+			// sources (card #841): how many rows each half contributed
+			// after dedupe/caps — merge quality becomes observable.
+			"sources": map[string]int{
+				"exact":  len(rows) - len(memRows),
+				"memory": len(memRows),
+				"merged": len(rows),
+			},
 			"semantic": semantic,
 		}, nil
 	}

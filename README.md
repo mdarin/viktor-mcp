@@ -97,6 +97,7 @@ printf '%s\n%s\n%s\n' \
     "ollama_url": "http://localhost:11434",
     "embed_model": "bge-m3",
     "collection": "viktor_tasks",
+    "hybrid_policy": "strict-slots",
     "git_enrich": {"main": "/path/to/repo"}
   }
 }
@@ -106,6 +107,14 @@ printf '%s\n%s\n%s\n' \
 инстанса (`#<task_id>` в сообщениях) попадает в память задачи.
 Пропущенные поля берут дефолты (`bge-m3`, `viktor_tasks`, localhost).
 CLI-приоритет: флаг > `VIKTOR_MEMORY_*` env > секция `memory`.
+
+Дополнительно: `full_sync_hours` (шаг полного пересканирования,
+дефолт 24; card #836), `file_patterns` (какие файлы репо индексировать,
+дефолт `["*.md"]`; card #842), `hybrid_policy` — порядок слияния
+`search_hybrid`: `strict-slots` (дефолт, точные результаты сверху) или
+`memory-first` (семантические строки в голове; card #841). Ответ
+`search_hybrid` содержит `sources: {exact, memory, merged}` — сколько
+строк дал каждый источник после дедупликации.
 
 #### Секция repowise (опциональна)
 

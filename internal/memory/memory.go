@@ -31,6 +31,25 @@ type Config struct {
 	// pattern without "/" matches the base name at any depth.
 	// Empty → ["*.md"].
 	FilePatterns []string
+	// HybridPolicy selects the search_hybrid merge ordering (card
+	// #841): "strict-slots" (default) appends memory rows after the
+	// exact rows; "memory-first" puts them at the head of the merged
+	// list. Empty → strict-slots.
+	HybridPolicy string
+}
+
+const (
+	HybridPolicyStrict      = "strict-slots"
+	HybridPolicyMemoryFirst = "memory-first"
+)
+
+// HybridPolicyOrDefault resolves the merge policy; anything unknown
+// falls back to strict-slots so hand-edited configs can't break merge.
+func (c Config) HybridPolicyOrDefault() string {
+	if c.HybridPolicy == HybridPolicyMemoryFirst {
+		return HybridPolicyMemoryFirst
+	}
+	return HybridPolicyStrict
 }
 
 func (c *Config) normalize() {

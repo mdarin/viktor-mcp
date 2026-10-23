@@ -155,6 +155,55 @@ func TestSearchHybridReserveSlots(t *testing.T) {
 	}
 }
 
+func TestSearchHybridSourcesCounters(t *testing.T) {
+	f, session := newCRUDFixture(t)
+	// Exact 301; memory adds 777 (301 is a dup → dropped).
+	ol, qd := fakeMemoryStack(t, []map[string]any{
+		{"score": 0.95, "payload": map[string]any{"task_id": 301, "title": "a", "chunk_type": "task"}},
+		{"score": 0.81, "payload": map[string]any{"task_id": 777, "title": "gem", "chunk_type": "task", "project_id": 8, "status": "open"}},
+	})
+	f.registry.SetMemoryConfigs(map[string]memory.Config{"default": {
+		QdrantURL: qd, OllamaURL: ol, EmbedModel: "fake", Collection: "viktor_tasks",
+	}})
+	out, err := callCRUD(t, session, "search_hybrid", map[string]any{"query": "a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := out["sources"].(map[string]any)
+	if src["exact"] != float64(1) || src["memory"] != float64(1) || src["merged"] != float64(2) {
+		t.Fatalf("sources counters (card #841): %v", src)
+	}
+}
+
+// TestSearchHybridMemoryFirstOrdering (card #841): hybrid_policy =
+// memory-first promotes memory rows to the head of the merged list;
+// the slot quota and the default (strict-slots) behavior are unchanged.
+func TestSearchHybridMemoryFirstOrdering(t *testing.T) {
+	f, session := newCRUDFixture(t)
+	ol, qd := fakeMemoryStack(t, []map[string]any{
+		{"score": 0.9, "payload": map[string]any{"task_id": 777, "title": "gem", "chunk_type": "task", "project_id": 8, "status": "open"}},
+	})
+	f.registry.SetMemoryConfigs(map[string]memory.Config{"default": {
+		QdrantURL: qd, OllamaURL: ol, EmbedModel: "fake", Collection: "viktor_tasks",
+		HybridPolicy: memory.HybridPolicyMemoryFirst,
+	}})
+	out, err := callCRUD(t, session, "search_hybrid", map[string]any{"query": "a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := out["tasks"].([]any)
+	if len(rows) != 2 {
+		t.Fatalf("same merge set: %v", out)
+	}
+	if rows[0].(map[string]any)["source"] != "memory" || rows[1].(map[string]any)["source"] != "exact" {
+		t.Fatalf("memory-first must put semantic rows first: %v", rows)
+	}
+	src := out["sources"].(map[string]any)
+	if src["exact"] != float64(1) || src["memory"] != float64(1) || src["merged"] != float64(2) {
+		t.Fatalf("sources under memory-first: %v", src)
+	}
+}
+
 func TestSearchHybridDegrades(t *testing.T) {
 	f, session := newCRUDFixture(t)
 

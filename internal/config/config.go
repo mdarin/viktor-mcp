@@ -64,6 +64,9 @@ type MemorySection struct {
 	// history enriches that instance's task memory. Per-instance by
 	// design: multi-instance setups track different repos.
 	GitEnrich map[string]string
+	// HybridPolicy selects search_hybrid merge ordering (card #841):
+	// "strict-slots" | "memory-first"; empty → strict-slots.
+	HybridPolicy string
 }
 
 // Qdrant returns the Qdrant URL of the memory section; a nil section
@@ -228,8 +231,12 @@ type fileMemoryIn struct {
 	QdrantAPIKey string `json:"qdrant_api_key"`
 	// FullSyncHours paces the periodic full rescan (ghost cleanup);
 	// number of hours, 0 = default (24).
-	FullSyncHours int               `json:"full_sync_hours"`
-	GitEnrich     map[string]string `json:"git_enrich"`
+	FullSyncHours int `json:"full_sync_hours"`
+	// FilePatterns selects repo markdown files for indexing; empty →
+	// ["*.md"].
+	FilePatterns []string          `json:"file_patterns"`
+	HybridPolicy string            `json:"hybrid_policy"`
+	GitEnrich    map[string]string `json:"git_enrich"`
 }
 
 type fileInstanceIn struct {
@@ -361,12 +368,15 @@ func (c *Config) applyFile(fc *fileConfig) error {
 	}
 	if fc.Memory != nil {
 		c.Memory = &MemorySection{
-			QdrantURL:    fc.Memory.QdrantURL,
-			OllamaURL:    fc.Memory.OllamaURL,
-			EmbedModel:   fc.Memory.EmbedModel,
-			Collection:   fc.Memory.Collection,
-			QdrantAPIKey: fc.Memory.QdrantAPIKey,
-			GitEnrich:    fc.Memory.GitEnrich,
+			QdrantURL:     fc.Memory.QdrantURL,
+			OllamaURL:     fc.Memory.OllamaURL,
+			EmbedModel:    fc.Memory.EmbedModel,
+			Collection:    fc.Memory.Collection,
+			QdrantAPIKey:  fc.Memory.QdrantAPIKey,
+			GitEnrich:     fc.Memory.GitEnrich,
+			FullSyncHours: fc.Memory.FullSyncHours,
+			FilePatterns:  fc.Memory.FilePatterns,
+			HybridPolicy:  fc.Memory.HybridPolicy,
 		}
 	}
 	if fc.Repowise != nil {
