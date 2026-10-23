@@ -9,7 +9,7 @@ import (
 )
 
 type ListOptions struct {
-	Search string
+	Search  string
 	Page    int
 	PerPage int
 	Limit   int

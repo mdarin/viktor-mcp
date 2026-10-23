@@ -100,7 +100,8 @@ func (c *Client) updateVerb(ctx context.Context, path string, body, out any) err
 	return c.Put(ctx, path, body, out)
 }
 
-func (c *Client) SetRateLimit(rps float64) *Client {	if rps <= 0 {
+func (c *Client) SetRateLimit(rps float64) *Client {
+	if rps <= 0 {
 		c.limiter = nil
 		return c
 	}

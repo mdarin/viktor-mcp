@@ -63,11 +63,11 @@ type BatchLabelSpec struct {
 }
 
 type BatchAssignBucketsIn struct {
-	ProjectID int                `json:"project_id"`
-	ViewID    int                `json:"view_id"`
+	ProjectID int `json:"project_id"`
+	ViewID    int `json:"view_id"`
 	// Bucket is the default bucket (by title) for assignments that omit
 	// bucket_id (card #845).
-	Bucket     string             `json:"bucket,omitempty"`
+	Bucket      string             `json:"bucket,omitempty"`
 	Assignments []BucketAssignSpec `json:"assignments"`
 }
 

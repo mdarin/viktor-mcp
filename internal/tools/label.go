@@ -1,9 +1,9 @@
 package tools
 
 import (
-	"viktor/internal/client"
 	"context"
 	"fmt"
+	"viktor/internal/client"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
