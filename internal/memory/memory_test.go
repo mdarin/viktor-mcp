@@ -941,3 +941,143 @@ func TestStatusNoFullSyncWithPointsIsStale(t *testing.T) {
 		t.Fatalf("status must report doctor ghost count, got %d", s.Ghosts)
 	}
 }
+
+// --- repo file indexing (card #842) ---
+
+func TestWalkRepoFiles(t *testing.T) {
+	dir := t.TempDir()
+	write := func(rel, body string) {
+		p := filepath.Join(dir, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("kb/architecture.md", "# Arch\n\nmemory layer over qdrant")
+	write("README.md", "# viktor")
+	write("node_modules/x.md", "junk")
+	write("docs/deep/note.markdown", "md extension variant")
+	write(".hidden.md", "secret")
+	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	chunks, skipped, err := WalkRepoFiles(dir, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if skipped != 0 {
+		t.Fatalf("skipped: %d", skipped)
+	}
+	got := map[string]bool{}
+	for _, c := range chunks {
+		got[c.Key] = true
+		if c.Payload["chunk_type"] != "file" || c.Payload["path"] == "" || c.Payload["repo"] == "" {
+			t.Fatalf("payload: %+v", c.Payload)
+		}
+	}
+	if !got["file-kb/architecture.md"] || !got["file-README.md"] {
+		t.Fatalf("missing md chunks: %v", got)
+	}
+	if got["file-node_modules/x.md"] || got["file-.hidden.md"] || got["file-docs/deep/note.markdown"] {
+		t.Fatalf("wrong files indexed: %v", got)
+	}
+}
+
+func TestWalkRepoFilesLimits(t *testing.T) {
+	dir := t.TempDir()
+	big := strings.Repeat("x", maxFileBytes+1)
+	for i := 0; i < maxFiles+2; i++ {
+		if i < 3 {
+			if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("big%d.md", i)), []byte(big), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("f%d.md", i)), []byte("small"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, skipped, err := WalkRepoFiles(dir, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if skipped == 0 {
+		t.Fatal("limits must skip some files")
+	}
+}
+
+func TestSplitMarkdownSections(t *testing.T) {
+	head := strings.Repeat("intro ", 900)
+	long := head + "\n## One\n" + strings.Repeat("a", 5000) + "\n## Two\n tail"
+	secs := splitMarkdown(long)
+	if len(secs) < 3 {
+		t.Fatalf("expected heading split, got %d sections", len(secs))
+	}
+	for i, s := range secs {
+		if strings.Contains(s, "## Two") && i != len(secs)-1 {
+			// "Two" section must start a new section — ok if last
+		}
+	}
+	small := splitMarkdown("# tiny")
+	if len(small) != 1 {
+		t.Fatalf("short doc must stay whole, got %d", len(small))
+	}
+}
+
+func TestSyncIndexesRepoFiles(t *testing.T) {
+	dir := t.TempDir()
+	repo := filepath.Join(dir, "repo")
+	if err := os.MkdirAll(filepath.Join(repo, "kb"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	doc := "# KB doc\n\nthe flubber cache invalidates on wednesdays"
+	if err := os.WriteFile(filepath.Join(repo, "kb", "guide.md"), []byte(doc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	src := &fakeSource{sinceAware: true, tasks: []Task{{ID: 1, Title: "x", Updated: "2026-10-22T10:00:00Z"}}}
+	st := newFakeStore()
+	ix, sp := newTestIndexer(t, src, &fakeEmbedder{dim: 4}, st, nil)
+	// Point the indexer's GitRepo at the temp repo.
+	ix.cfg.GitRepo = repo
+
+	rep, err := ix.SyncFull(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Files != 1 || len(st.points) < 2 {
+		t.Fatalf("file chunk not indexed: files=%d points=%d", rep.Files, len(st.points))
+	}
+	// Incremental: unchanged file is skipped.
+	rep2, err := ix.Sync(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep2.Files != 0 {
+		t.Fatalf("unchanged file must be skipped, files=%d", rep2.Files)
+	}
+	// Edit → only the file re-indexes.
+	if err := os.WriteFile(filepath.Join(repo, "kb", "guide.md"), []byte(doc+" updated!"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rep3, err := ix.Sync(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep3.Files != 1 || rep3.TasksScanned != 0 {
+		t.Fatalf("edit must reindex the file only: %+v", rep3)
+	}
+	// Delete → chunk dies on the next complete scan.
+	if err := os.Remove(filepath.Join(repo, "kb", "guide.md")); err != nil {
+		t.Fatal(err)
+	}
+	rep4, err := ix.SyncFull(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep4.Deleted != 1 {
+		t.Fatalf("deleted file chunk must be removed: %+v", rep4)
+	}
+	_ = sp
+}

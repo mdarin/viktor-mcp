@@ -18,6 +18,10 @@ type Report struct {
 	Deleted      int    `json:"deleted"`
 	Skipped      int    `json:"skipped"` // chunks unchanged since last sync
 	Commits      int    `json:"commits"` // commit chunks upserted this run
+	// Repo file indexing (card #842): file chunks upserted this run and
+	// documents skipped by the size/count limits.
+	Files        int    `json:"files"`
+	SkippedFiles int    `json:"skipped_files"`
 	Cursor       string `json:"cursor"`
 	Enriched     int    `json:"enriched"` // tasks with git commit enrichment
 }
@@ -166,6 +170,30 @@ func (ix *Indexer) sync(ctx context.Context, full bool) (*Report, error) {
 			}
 			report.Commits++
 			pendingUpserts = append(pendingUpserts, pending{chunk: chunk, id: pointID(ix.cfg.Instance, chunk.Key)})
+		}
+	}
+
+	// Repo file chunks (card #842): markdown docs join the same hash-
+	// compare pipeline, so only changed sections re-embed. Walking
+	// happens on every sync; a vanished file's chunks die in the
+	// doomed-loop below once the scan is complete.
+	if ix.cfg.GitRepo != "" {
+		fchunks, skipped, err := WalkRepoFiles(ix.cfg.GitRepo, ix.cfg.FilePatterns)
+		if err != nil {
+			// File indexing is best-effort: a broken repo path must not
+			// stop the board projection.
+			fchunks, skipped = nil, 0
+		}
+		report.SkippedFiles = skipped
+		for _, fc := range fchunks {
+			seenKeys[fc.Key] = true
+			h := hashText(fc.Text)
+			if ix.state.Hashes[fc.Key] == h {
+				report.Skipped++
+				continue
+			}
+			report.Files++
+			pendingUpserts = append(pendingUpserts, pending{chunk: Chunk{Key: fc.Key, Text: fc.Text, Payload: fc.Payload}, id: pointID(ix.cfg.Instance, fc.Key)})
 		}
 	}
 

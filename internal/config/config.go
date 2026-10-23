@@ -57,6 +57,9 @@ type MemorySection struct {
 	// (card #836: Vikunja has no deleted_at filter, ghosts die on the
 	// periodic full sync).
 	FullSyncHours int
+	// FilePatterns selects repo files for memory indexing (card #842);
+	// empty → "*.md".
+	FilePatterns []string
 	// GitEnrich maps instance name → path to the git repo whose commit
 	// history enriches that instance's task memory. Per-instance by
 	// design: multi-instance setups track different repos.

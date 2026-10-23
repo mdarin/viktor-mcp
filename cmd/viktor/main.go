@@ -160,6 +160,7 @@ func runMemory(ctx context.Context, args []string) error {
 		QdrantAPIKey: pick("apikey", "VIKTOR_MEMORY_QDRANT_API_KEY", memSection.QdrantKey()),
 		GitRepo:      pick("repo", "VIKTOR_MEMORY_GIT_REPO", memSection.RepoFor(instName)),
 		FullSyncMaxAge: time.Duration(memSection.FullSyncHoursOrDefault()) * time.Hour,
+		FilePatterns:   memSection.FilePatterns,
 	}
 	if memCfg.GitRepo == "" {
 		// "Index the current repository": repo history joins the board

@@ -27,6 +27,10 @@ type Config struct {
 	// FullSyncMaxAge is how long a full rescan may be overdue before
 	// status reports the index as stale (card #836). 0 → 24h.
 	FullSyncMaxAge time.Duration
+	// FilePatterns selects repo files for indexing (card #842); a
+	// pattern without "/" matches the base name at any depth.
+	// Empty → ["*.md"].
+	FilePatterns []string
 }
 
 func (c *Config) normalize() {
