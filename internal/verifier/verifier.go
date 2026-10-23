@@ -82,14 +82,14 @@ type DiffSource func(ctx context.Context, repo string) (string, error)
 
 // Verdict is the outcome of one verification pass.
 type Verdict struct {
-	TaskID    int         `json:"task_id"`
-	Drift     bool        `json:"drift"`
-	Semantic  float64     `json:"semantic"`
-	Exact     float64     `json:"exact"`
-	TopAnchor string      `json:"top_anchor,omitempty"`
-	Reason    string      `json:"reason"`
-	Anchors   int         `json:"anchors"`
-	ShadowID  string      `json:"shadow_id,omitempty"`
+	TaskID    int     `json:"task_id"`
+	Drift     bool    `json:"drift"`
+	Semantic  float64 `json:"semantic"`
+	Exact     float64 `json:"exact"`
+	TopAnchor string  `json:"top_anchor,omitempty"`
+	Reason    string  `json:"reason"`
+	Anchors   int     `json:"anchors"`
+	ShadowID  string  `json:"shadow_id,omitempty"`
 	// ChangeRisk is the optional repowise digest (card #823); nil when
 	// the repowise section is absent — the output is then byte-identical
 	// to pre-#823.
@@ -174,7 +174,7 @@ func (v *Verifier) taskChunkTitles(ctx context.Context, taskID int) map[string]b
 // title and its indexed copy compare equal despite markdown noise.
 func normAnchorText(s string) string {
 	s = strings.ToLower(strings.Join(strings.Fields(s), " "))
-	return strings.Trim(s, " \t.:!?,;:\u00ab\u00bb\"'`()*[]{}*_-")
+	return strings.Trim(s, " \t.:!?,;:«»\"'`()*[]{}_")
 }
 
 func payloadTaskID(v any) (int, bool) {
