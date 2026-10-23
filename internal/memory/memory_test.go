@@ -1015,10 +1015,9 @@ func TestSplitMarkdownSections(t *testing.T) {
 	if len(secs) < 3 {
 		t.Fatalf("expected heading split, got %d sections", len(secs))
 	}
-	for i, s := range secs {
-		if strings.Contains(s, "## Two") && i != len(secs)-1 {
-			// "Two" section must start a new section — ok if last
-		}
+	joined := strings.Join(secs, "\n---\n")
+	if !strings.Contains(joined, "## Two") {
+		t.Fatal("second heading lost in split")
 	}
 	small := splitMarkdown("# tiny")
 	if len(small) != 1 {
