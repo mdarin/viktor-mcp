@@ -6,3 +6,6 @@ TODO.md
 # Local opencode project config: binds the repowise MCP instance to this
 # repo (the global config binds it to hivemind). Machine-specific path.
 /opencode.json
+
+# repowise index artifacts
+.repowise/
