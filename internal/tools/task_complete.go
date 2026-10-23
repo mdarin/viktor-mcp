@@ -137,13 +137,13 @@ func handleTaskComplete(r *Registry) mcp.ToolHandlerFor[TaskCompleteIn, any] {
 					}
 					out["fallback_used"] = true
 					if got, ok = verifyBucket(ctx, r, projectID, viewID, in.TaskID); !ok || got != doneBucket {
-						// Some Vikunja v2 builds (<=2.6.0) accept the
+						// Some Vikunja v2 builds (<=2.7.1) accept the
 						// bucket-move route but silently no-op it. The task
 						// is done; surface the missed kanban move as a
 						// warning instead of failing the completion.
 						out["bucket_moved"] = false
 						out["bucket_id"] = 0
-						out["warning"] = fmt.Sprintf("task %d is done but could not be moved to done bucket %d (server did not apply the move; Vikunja <=2.6.0 v2 kanban routes are no-op)", in.TaskID, doneBucket)
+						out["warning"] = fmt.Sprintf("task %d is done but could not be moved to done bucket %d (server did not apply the move; Vikunja <=2.7.1 v2 kanban routes are no-op)", in.TaskID, doneBucket)
 						return nil, out, nil
 					}
 					out["bucket_moved"] = true

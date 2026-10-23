@@ -405,9 +405,9 @@ deleted_shadowed, pending, conflicts, failed}`. Внесённые на доск
 проектов удаляются. `shadow_status` показывает режим и очередь, `shadow_clear`
 вычищает synced-записи журнала.
 
-## Live-интеграция и ловушки Vikunja v2.6.0
+## Live-интеграция и ловушки Vikunja v2.7.1
 
-Сервер проверен против реального Vikunja v2.6.0. Нестандартности, учтённые в клиенте:
+Сервер проверен против реального Vikunja v2.7.1 (ранее v2.6.0). Нестандартности, учтённые в клиенте:
 
 - **Создание задач и проектов — только `PUT`**: `POST /projects/{id}/tasks` и
   `POST /projects` возвращают `405 Method Not Allowed`. Клиент использует `PUT`.
@@ -479,7 +479,7 @@ ParadeDB (`deploy/paradedb-init/01_search_history.sql`). Для `memory sync`
 Перенос завершён: stdio-сервер (94 tool, unit + golden + live-тесты), REST-клиент
 с ретраями/rate-limit/пагинацией, scoring-движок, multi-instance конфиг,
 наблюдаемость (slog + счётчики + таймауты), конкурентный `task_batch_get`,
-шаринг на пользователей и команды. Проверено против реального Vikunja v2.6.0.
+шаринг на пользователей и команды. Проверено против реального Vikunja v2.7.1.
 
 ## Лицензия
 

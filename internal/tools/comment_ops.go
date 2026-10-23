@@ -79,7 +79,7 @@ func handleCommentRecent(_ *Registry) mcp.ToolHandlerFor[CommentRecentIn, any] {
 			"comments":  []map[string]any{},
 			"count":     0,
 			"supported": false,
-			"message":   "not supported by Vikunja v2.6.0: GET /comments/all returns 404; use comment_list per task instead",
+			"message":   "not supported by Vikunja v2.7.1: GET /comments/all returns 404; use comment_list per task instead",
 		}, nil
 	}
 }
