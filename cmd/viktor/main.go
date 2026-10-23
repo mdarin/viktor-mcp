@@ -19,6 +19,7 @@ import (
 	"viktor/internal/config"
 	"viktor/internal/fsmstate"
 	"viktor/internal/memory"
+	"viktor/internal/reflection"
 	"viktor/internal/server"
 	"viktor/internal/shadow"
 	"viktor/internal/tools"
@@ -59,6 +60,26 @@ func main() {
 		fmt.Fprintln(os.Stderr, "viktor:", err)
 		os.Exit(1)
 	}
+}
+
+// pgReflectionSource adapts the reflection PG store to the indexer feed
+// (card #853): rows convert to the memory projection's ReflectionRow.
+type pgReflectionSource struct{ s *reflection.PG }
+
+func (p pgReflectionSource) ReflectionsSince(ctx context.Context, afterID int64, limit int) ([]memory.ReflectionRow, error) {
+	recs, err := p.s.Since(ctx, afterID, limit)
+	if err != nil {
+		return nil, err
+	}
+	rows := make([]memory.ReflectionRow, 0, len(recs))
+	for _, r := range recs {
+		rows = append(rows, memory.ReflectionRow{
+			ID: r.ID, TaskID: r.TaskID, Repo: r.Repo, Goals: r.Goals,
+			GoalConflict: r.GoalConflict, Resolution: r.Resolution,
+			Outcome: r.Outcome, Confidence: r.Confidence, CreatedAt: r.CreatedAt,
+		})
+	}
+	return rows, nil
 }
 
 // runMemory implements `viktor memory sync` — the CLI entry point of the
@@ -187,6 +208,16 @@ func runMemory(ctx context.Context, args []string) error {
 	ix, err := memory.NewIndexer(memCfg, memory.NewSource(api, store), memory.NewOllama(memCfg.OllamaURL), memory.NewQdrant(memCfg.QdrantURL, memCfg.QdrantAPIKey), gitEnricher(memCfg), memory.DefaultStatePath(instName))
 	if err != nil {
 		return err
+	}
+	// Reflection journal feed (card #853): when a DSN is configured, new
+	// reflection records join the projection; a down journal only shows
+	// up as report.reflections_error, never fails the sync.
+	if cfg.Reflection != nil && cfg.Reflection.PGDSN != "" {
+		rstore, rerr := reflection.NewPG(reflection.Config{PGDSN: cfg.Reflection.PGDSN, Repo: cfg.Reflection.Repo})
+		if rerr == nil {
+			ix.SetReflectionSource(pgReflectionSource{rstore})
+			defer func() { _ = rstore.Close() }()
+		}
 	}
 
 	if *status {

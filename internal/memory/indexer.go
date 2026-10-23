@@ -21,21 +21,27 @@ type Report struct {
 	Commits      int    `json:"commits"` // commit chunks upserted this run
 	// Repo file indexing (card #842): file chunks upserted this run and
 	// documents skipped by the size/count limits.
-	Files        int    `json:"files"`
-	SkippedFiles int    `json:"skipped_files"`
-	Cursor       string `json:"cursor"`
-	Enriched     int    `json:"enriched"` // tasks with git commit enrichment
+	Files        int `json:"files"`
+	SkippedFiles int `json:"skipped_files"`
+	// Reflection journal (card #853): reflection chunks upserted this
+	// run; a non-empty ReflectionsError means the journal was
+	// unreachable and indexing degraded to the rest of the sources.
+	Reflections      int    `json:"reflections"`
+	ReflectionsError string `json:"reflections_error,omitempty"`
+	Cursor           string `json:"cursor"`
+	Enriched         int    `json:"enriched"` // tasks with git commit enrichment
 }
 
 // Indexer syncs tracker tasks into the vector store.
 type Indexer struct {
-	cfg       Config
-	source    TaskSource
-	embedder  Embedder
-	store     VectorStore
-	git       GitEnricher
-	state     *syncState
-	statePath string
+	cfg        Config
+	source     TaskSource
+	embedder   Embedder
+	store      VectorStore
+	git        GitEnricher
+	reflectSrc ReflectionSource
+	state      *syncState
+	statePath  string
 }
 
 // NewIndexer wires the indexer. statePath may be empty to disable
@@ -64,6 +70,14 @@ func NewIndexer(cfg Config, source TaskSource, embedder Embedder, store VectorSt
 }
 
 const embedBatch = 32
+
+// reflectionBatch is the journal page size; a short page ends the
+// reflection loop (card #853).
+const reflectionBatch = 200
+
+// SetReflectionSource wires the reflection journal feed (card #853).
+// Fluent on purpose: NewIndexer keeps its signature for compatibility.
+func (ix *Indexer) SetReflectionSource(src ReflectionSource) { ix.reflectSrc = src }
 
 // Sync performs one incremental pass: fetch the tasks updated since the
 // stored cursor (full scan on first run), chunk, embed only changed
@@ -195,6 +209,42 @@ func (ix *Indexer) sync(ctx context.Context, full bool) (*Report, error) {
 			}
 			report.Files++
 			pendingUpserts = append(pendingUpserts, pending{chunk: Chunk{Key: fc.Key, Text: fc.Text, Payload: fc.Payload}, id: pointID(ix.cfg.Instance, fc.Key)})
+		}
+	}
+
+	// Reflection journal chunks (card #853): the journal is append-only
+	// (records are never rewritten or deleted), so a numeric id cursor
+	// with hash-compare makes repeat syncs free. Reflection chunks are
+	// deliberately NOT added to seenKeys: they must not participate in
+	// the scan's ghost cleanup — their lifecycle is journal-owned, not
+	// scan-owned. A broken journal degrades the report, not the sync.
+	if ix.reflectSrc != nil {
+		after := ix.state.ReflectionCursor
+		for {
+			rows, err := ix.reflectSrc.ReflectionsSince(ctx, after, reflectionBatch)
+			if err != nil {
+				report.ReflectionsError = err.Error()
+				break
+			}
+			for _, r := range rows {
+				chunk := ChunkReflection(r)
+				h := hashText(chunk.Text)
+				if ix.state.Hashes[chunk.Key] == h {
+					report.Skipped++
+				} else {
+					report.Reflections++
+					pendingUpserts = append(pendingUpserts, pending{chunk: chunk, id: pointID(ix.cfg.Instance, chunk.Key)})
+				}
+				if r.ID > after {
+					after = r.ID
+				}
+			}
+			if len(rows) < reflectionBatch {
+				break
+			}
+		}
+		if report.ReflectionsError == "" {
+			ix.state.ReflectionCursor = after
 		}
 	}
 

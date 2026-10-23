@@ -204,6 +204,10 @@ type Config struct {
 	// Board is the optional kanban board profile config (card #845); nil
 	// means the builtin default profile applies.
 	Board *BoardSection
+	// Reflection is the optional reflection-journal config (card #853);
+	// nil (or an empty PGDSN) means reflection_log / reflection_list
+	// answer {supported:false}.
+	Reflection *ReflectionSection
 	// Agent is the identity this server run serves (env VIKUNJA_AGENT);
 	// empty means the operator token is used everywhere.
 	Agent string
@@ -215,6 +219,21 @@ type fileConfig struct {
 	Memory          *fileMemoryIn             `json:"memory"`
 	Repowise        *fileRepowiseIn           `json:"repowise"`
 	Board           *BoardSection             `json:"board"`
+	Reflection      *fileReflectionIn         `json:"reflection"`
+}
+
+// fileReflectionIn is the reflection-journal config (card #853).
+type fileReflectionIn struct {
+	PGDSN string `json:"pg_dsn"`
+	Repo  string `json:"repo"`
+}
+
+// ReflectionSection configures the reflection journal (card #853): the
+// PostgreSQL DSN hosting the canonical `viktor.reflections` table and
+// the repo stamp recorded on every log.
+type ReflectionSection struct {
+	PGDSN string
+	Repo  string
 }
 
 type fileRepowiseIn struct {
@@ -393,6 +412,9 @@ func (c *Config) applyFile(fc *fileConfig) error {
 	if fc.Board != nil {
 		c.Board = fc.Board
 	}
+	if fc.Reflection != nil {
+		c.Reflection = &ReflectionSection{PGDSN: fc.Reflection.PGDSN, Repo: fc.Reflection.Repo}
+	}
 	return nil
 }
 
@@ -402,6 +424,21 @@ func (c *Config) applyEnv(env map[string]string) error {
 	}
 	if v := env["VIKUNJA_AGENT"]; v != "" {
 		c.Agent = strings.TrimSpace(v)
+	}
+	// Reflection journal env (card #853): global section, env wins over
+	// the file per key.
+	refl := c.Reflection
+	if refl == nil {
+		refl = &ReflectionSection{}
+	}
+	if v := env["VIKTOR_REFLECTION_PG_DSN"]; v != "" {
+		refl.PGDSN = strings.TrimSpace(v)
+	}
+	if v := env["VIKTOR_REFLECTION_REPO"]; v != "" {
+		refl.Repo = strings.TrimSpace(v)
+	}
+	if refl.PGDSN != "" {
+		c.Reflection = refl
 	}
 	get := func(inst, key string) (string, bool) {
 		if inst == "default" {

@@ -358,6 +358,8 @@ go test ./internal/tools -update-snapshot
 | `project_share` | Share a project with a user; resolves user_id/username pair automatically (Vikunja needs both) |
 | `project_share_team` | Share a project with a team, list team shares, or revoke access (action: share\|list\|revoke; permission 0=read 1=write 2=admin) |
 | `project_update` | Update a project |
+| `reflection_list` | List logged reflections for a task: goal_conflict, resolution, outcome, confidence. Use to recall why a task was resolved the way it was |
+| `reflection_log` | Log a reflection: how a goal conflict (quality vs speed, follow-up incident) was resolved. Stores in the reflection journal (PostgreSQL) and optionally posts a human-readable task comment. Use after design decisions, trade-offs, and incident post-mortems |
 | `search_all` | Search tasks and projects across instances |
 | `search_all_tasks` | List tasks across instances with filters |
 | `search_hybrid` | Hybrid search: exact task filtering plus top-K semantic hits from the memory index (source=memory); memory issues degrade to a note, never fail |

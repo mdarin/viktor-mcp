@@ -12,6 +12,7 @@ import (
 	"viktor/internal/client"
 	"viktor/internal/config"
 	"viktor/internal/memory"
+	"viktor/internal/reflection"
 	"viktor/internal/shadow"
 	"viktor/internal/tools"
 
@@ -78,6 +79,15 @@ func Build(_ context.Context, stdout io.Writer) (*mcp.Server, *tools.Registry, e
 	}
 	if cfg.Repowise != nil {
 		registry.SetRepowise(cfg.Repowise)
+	}
+	// Reflection journal (card #853): one global section expanded to
+	// every configured instance; records carry the repo stamp.
+	if cfg.Reflection != nil && cfg.Reflection.PGDSN != "" {
+		reflCfgs := make(map[string]reflection.Config, len(cfg.Instances))
+		for name := range cfg.Instances {
+			reflCfgs[name] = reflection.Config{PGDSN: cfg.Reflection.PGDSN, Repo: cfg.Reflection.Repo}
+		}
+		registry.SetReflectionConfigs(reflCfgs)
 	}
 	registry.SetBoard(cfg.Board)
 	registry.RegisterAll()

@@ -14,8 +14,12 @@ type syncState struct {
 	// LastFullSync (RFC3339) is the last time a scan ran that could see
 	// deletions (a complete batch) — the ghost-cleanup reference age
 	// surfaced by status (card #836).
-	LastFullSync string            `json:"last_full_sync,omitempty"`
-	Hashes       map[string]string `json:"hashes"` // chunk key -> hash(text)
+	LastFullSync string `json:"last_full_sync,omitempty"`
+	// ReflectionCursor is the newest reflection journal id seen by the
+	// indexer (card #853); the journal is append-only, so a numeric id
+	// cursor is enough. 0 = nothing indexed yet.
+	ReflectionCursor int64             `json:"reflection_cursor,omitempty"`
+	Hashes           map[string]string `json:"hashes"` // chunk key -> hash(text)
 }
 
 func loadState(path string) (*syncState, error) {

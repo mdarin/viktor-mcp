@@ -1453,6 +1453,73 @@
     "name": "project_update"
   },
   {
+    "description": "List logged reflections for a task: goal_conflict, resolution, outcome, confidence. Use to recall why a task was resolved the way it was",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "instance": {
+          "type": "string"
+        },
+        "limit": {
+          "type": "integer"
+        },
+        "task_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "task_id"
+      ],
+      "type": "object"
+    },
+    "name": "reflection_list"
+  },
+  {
+    "description": "Log a reflection: how a goal conflict (quality vs speed, follow-up incident) was resolved. Stores in the reflection journal (PostgreSQL) and optionally posts a human-readable task comment. Use after design decisions, trade-offs, and incident post-mortems",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "comment": {
+          "type": "boolean"
+        },
+        "confidence": {
+          "type": "number"
+        },
+        "goal_conflict": {
+          "type": "string"
+        },
+        "goals": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "type": "object"
+        },
+        "instance": {
+          "type": "string"
+        },
+        "outcome": {
+          "type": "string"
+        },
+        "repo": {
+          "type": "string"
+        },
+        "resolution": {
+          "type": "string"
+        },
+        "task_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "task_id",
+        "goal_conflict",
+        "resolution"
+      ],
+      "type": "object"
+    },
+    "name": "reflection_log"
+  },
+  {
     "description": "Search tasks and projects across instances",
     "inputSchema": {
       "additionalProperties": false,
