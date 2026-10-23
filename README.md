@@ -375,6 +375,31 @@ go test ./internal/tools -update-snapshot
 | `watchdog_scan` | Stall FSM-tracked in_progress tasks that have seen no tracker activity beyond the threshold |
 <!-- tools:end -->
 
+## Непрерывные цели карточки (goals-маркер, card #854)
+
+Карточка может объявить вектор целей в описании — невидимым HTML-комментарием
+(паттерн как у маркера defer из `today_snooze`):
+
+```
+<!-- viktor:goals speed=0.9 quality=0.3 safety=0.7 scope=0.5 -->
+```
+
+- Оси: `speed`, `quality`, `safety`, `scope`, все 0..1; `0.5` — нейтральное
+  значение и вклад в score не даёт. Отсутствующие оси считаются 0.5,
+  карточка без маркера ранжируется ровно как раньше.
+- Вклад детерминированный: `(value − 0.5) × 2 × вес_оси` (веса: quality 4,
+  speed 3, safety 3, scope −2 — широкий scope слегка понижает срочность
+  старта). Виден в why-trace `today_actions` как term `goals`.
+- Неизвестные оси возвращаются в ответе `today_actions` в поле
+  `goals_unknown_axes`; битый маркер (нечисловое значение известной оси)
+  молча игнорируется, ранжирование не ломается.
+- Поле `Engine.SpeedDamp` — зарезервированный детерминированный хук
+  контекстной модуляции (0 = нет): гасит ось speed, будущая интеграция
+  repowise-hotspot'ов станет его единственным писателем.
+- Веса осей пока фиксированные константы, не `today_set_weights`: при
+  ~десятках конфликтов в неделю калибровочных данных для настраиваемых
+  весов нет.
+
 ## Offline mode (shadow)
 
 Когда Vikunja недоступен (connection refused / DNS / TLS, но не HTTP-ошибки),

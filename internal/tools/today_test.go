@@ -64,6 +64,52 @@ func TestTodayActions(t *testing.T) {
 	}
 }
 
+func TestTodayActionsGoalsMarker(t *testing.T) {
+	f, session := newCRUDFixture(t)
+	f.tasks[301]["description"] = "<!-- viktor:goals quality=1 -->"
+	f.tasks[303]["description"] = "<!-- viktor:goals speed=1 style=fancy -->"
+	out, err := callCRUD(t, session, "today_actions", map[string]any{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got301, got302 bool
+	for _, i := range out["intents"].([]any) {
+		for _, it := range i.(map[string]any)["items"].([]any) {
+			row := it.(map[string]any)
+			id := int(row["task_id"].(float64))
+			if id != 301 && id != 303 {
+				continue
+			}
+			terms := row["terms"].([]any)
+			hasGoals := false
+			for _, tm := range terms {
+				if tm.(map[string]any)["name"] == "goals" {
+					hasGoals = true
+				}
+			}
+			if !hasGoals {
+				t.Fatalf("goals term missing in row: %v", row)
+			}
+			switch id {
+			case 301:
+				got301 = true
+				if _, ok := row["goals_unknown_axes"]; ok {
+					t.Fatalf("301 must have no unknown axes: %v", row)
+				}
+			case 303:
+				got302 = true
+				ax, ok := row["goals_unknown_axes"].([]any)
+				if !ok || len(ax) != 1 || ax[0] != "style" {
+					t.Fatalf("302 unknown axes: %v", row)
+				}
+			}
+		}
+	}
+	if !got301 || !got302 {
+		t.Fatalf("rows 301/302 missing: %v %v", got301, got302)
+	}
+}
+
 func TestTodaySnoozeValidation(t *testing.T) {
 	_, session := newCRUDFixture(t)
 	if _, err := callCRUD(t, session, "today_snooze", map[string]any{"task_id": 301}); err == nil {

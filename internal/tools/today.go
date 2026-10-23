@@ -46,6 +46,9 @@ func toScoringTask(t map[string]any) scoring.Task {
 		UpdatedAt: parseTimeAny(t["updated"]),
 	}
 	st.DeferredCount, st.DeferredDread = parseDeferMarker(str(t, "description"))
+	if g, _ := scoring.ParseGoals(str(t, "description")); g != nil {
+		st.Goals = g
+	}
 	if d := parseTimeAny(t["due_date"]); !d.IsZero() {
 		st.DueDate = &d
 	}
@@ -129,6 +132,12 @@ func handleTodayActions(r *Registry) mcp.ToolHandlerFor[TodayActionsIn, any] {
 			}
 			st = append(st, s)
 		}
+		unknownGoals := map[int][]string{}
+		for _, t := range tasks {
+			if _, unknown := scoring.ParseGoals(str(t, "description")); len(unknown) > 0 {
+				unknownGoals[asInt(t["id"])] = unknown
+			}
+		}
 		engine := scoring.NewEngine(time.Now(), time.Local)
 		ranked := engine.Rank(st)
 		clusters := scoring.ClusterIntents(ranked)
@@ -143,13 +152,17 @@ func handleTodayActions(r *Registry) mcp.ToolHandlerFor[TodayActionsIn, any] {
 				if total >= limit {
 					break
 				}
-				items = append(items, map[string]any{
+				item := map[string]any{
 					"task_id": float64(s.Task.ID),
 					"score":   s.Score,
 					"why":     scoring.WhyTrace(s),
 					"terms":   termsOut(s),
 					"stalled": s.Task.Stalled,
-				})
+				}
+				if unknown, ok := unknownGoals[s.Task.ID]; ok {
+					item["goals_unknown_axes"] = unknown
+				}
+				items = append(items, item)
 				total++
 			}
 			if len(items) == 0 {

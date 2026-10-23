@@ -14,6 +14,10 @@ type Task struct {
 	DeferredCount int
 	DeferredDread int
 	Stalled       bool
+	// Goals carries the continuous goal vector parsed from the
+	// <!-- viktor:goals --> marker; nil means the card declares none and
+	// the goals term never fires (card #854).
+	Goals *Goals
 }
 
 type Caps struct {
@@ -56,6 +60,11 @@ type Engine struct {
 	Caps     Caps
 	Location *time.Location
 	Now      time.Time
+	// SpeedDamp is the deterministic context-modulation hook (card #854):
+	// when set in (0,1) the speed axis of the goals vector is damped by
+	// this factor before scoring. Zero means no modulation. A future
+	// repowise hotspot integration is expected to be the only writer.
+	SpeedDamp float64
 }
 
 func NewEngine(now time.Time, loc *time.Location) Engine {
@@ -104,6 +113,14 @@ func (e Engine) Score(t Task) Scored {
 		// Watchdog-flagged stall: push the task down but keep it visible
 		// in the why trace (card #58).
 		terms = append(terms, Term{"stalled", w.Stalled})
+	}
+
+	if t.Goals != nil {
+		g := *t.Goals
+		if e.SpeedDamp > 0 && e.SpeedDamp < 1 {
+			g = g.Damped(GoalSpeed, e.SpeedDamp)
+		}
+		terms = append(terms, Term{"goals", g.Contribution()})
 	}
 
 	if t.WaitingSince != nil && !t.WaitingSince.IsZero() {
