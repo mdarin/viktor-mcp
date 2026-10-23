@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	Version           = "0.8.0"
+	Version           = "0.8.1"
 	defaultUserAgent  = "viktor/" + Version
 	defaultTimeout    = 30 * time.Second
 	defaultMaxRetries = 2

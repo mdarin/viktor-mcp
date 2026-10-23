@@ -6,18 +6,49 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go&logoColor=white)](https://go.dev)
 
-Vikunja MCP-сервер на Go: порт и модернизация [vikunja-mcp](https://github.com/ivantohelpyou/vikunja-mcp) (Python, FastMCP).
+viktor — персональный агентный слой поверх [Vikunja](https://vikunja.io):
+MCP-сервер на Go, который превращает канбан-трекер в рабочую среду
+AI-агента. Это уже не тонкий клиент и не дроп-ин замена
+[vikunja-mcp](https://github.com/ivantohelpyou/vikunja-mcp) — проект вырос
+из hard fork'а (Python, FastMCP) в самостоятельную систему с собственной
+архитектурой; история и политика синхронизации с апстримом —
+[ADR 0002](docs/adr/0002-hard-fork-policy.md).
 
-Итог — один статический бинарник вместо uv/Python/uv cache prune.
+Что делает viktor поверх «голого» трекера:
+
+- **Полный CRUD трекера** — 110 tools: задачи, проекты, комментарии, метки,
+  канбан, вью, команды, шаринг, handoff-очередь (assignment queue).
+- **Детерминированный скоринг дня (`today_*`)** — ранжирование и кластеризация
+  открытых задач по интентам с объяснимой why-трассой; настраиваемые веса;
+  таксономия откладывания (dread/waiting/blocked) с эскалацией; weekly
+  kill-list; непрерывный вектор целей карточки (goals-маркер, card #854).
+  Никакого LLM — воспроизводимо и тестируемо.
+- **FSM-жизненный цикл карточек** — claim → in_progress → submit_for_review →
+  verify_review (семантическая сверка git-диффа с задачей) → done; stalled
+  детект и возврат через watchdog.
+- **Семантическая память проектов** — Qdrant-индекс задач, комментариев,
+  коммитов и файлов репо; гибридный поиск (точный + векторный), repo-scoped
+  фильтрация, orphan-чистка и full-rescan через `doctor`; CLI `viktor memory`.
+- **Устойчивость** — offline shadow-mode (append-only журнал операций +
+  локальное зеркало, авто-replay при возврате связи), ретраи/rate-limit в
+  клиенте, честные деградации вместо падений.
+
+Итог — один статический бинарник (stdio MCP + CLI) вместо uv/Python/uv cache
+prune.
 
 ## Структура
 
 ```
-cmd/viktor/          точка входа (stdio-сервер)
+cmd/viktor/          точка входа: stdio MCP-сервер + CLI (memory, watchdog, version)
 internal/config/     конфигурация: env + JSON-файл, multi-instance, секреты
 internal/client/     REST-клиент Vikunja (auth, ретраи, rate-limit, читаемые ошибки, пагинация, NullTime)
-internal/scoring/    детерминированный scoring-движок (веса today_*; без LLM)
-internal/tools/      реестр MCP-инструментов: имя → схема → handler (108 namespaced)
+internal/scoring/    детерминированный scoring-движок (веса today_*, defer-политика, goals-вектор; без LLM)
+internal/tools/      реестр MCP-инструментов: имя → схема → handler (110 namespaced)
+internal/fsmstate/   FSM карточек (claim/submit/verify, idempotent request_id)
+internal/memory/     семантическая память: Qdrant-индексатор, doctor, ghost-свит
+internal/shadow/     offline shadow-режим: append-only журнал + зеркало + replay
+internal/verifier/   семантическая верификация git-диффа против задачи
+internal/watchdog/   детект stalled in_progress-задач
 internal/server/     сборка MCP-сервера, slog-наблюдаемость
 docs/adr/            архитектурные решения
 ```
@@ -501,10 +532,15 @@ ParadeDB (`deploy/paradedb-init/01_search_history.sql`). Для `memory sync`
 
 ## Статус
 
-Перенос завершён: stdio-сервер (94 tool, unit + golden + live-тесты), REST-клиент
-с ретраями/rate-limit/пагинацией, scoring-движок, multi-instance конфиг,
-наблюдаемость (slog + счётчики + таймауты), конкурентный `task_batch_get`,
-шаринг на пользователей и команды. Проверено против реального Vikunja v2.7.1.
+Актуальный релиз: **v0.8.1** (Go, 110 tools, unit + golden + surface-check +
+live-тесты против реального Vikunja v2.7.1).
+
+Пройдено и в бою: полный перенос апстрима; multi-instance; shadow-offline;
+FSM-жизненный цикл с верификацией диффов; семантическая память (hybrid,
+repo-scoped, doctor/full-rescan/ghost-свит); детерминированный скоринг дня с
+defer-таксономией, эскалацией и непрерывными целями (goals-маркер). Ближайшие
+шаги — журнал рефлексии в PostgreSQL (card #853) и аудит гигиены трекера
+(card #855).
 
 ## Лицензия
 
