@@ -336,7 +336,7 @@ type Status struct {
 	// capable (complete) scan ran, its age, whether it is overdue, and
 	// the orphan count a doctor sweep reports right now.
 	LastFullSync  string `json:"last_full_sync,omitempty"`
-	FullSyncAge   string `json:"full_sync_age,omitempty"`  // "" = never
+	FullSyncAge   string `json:"full_sync_age,omitempty"` // "" = never
 	FullSyncStale bool   `json:"full_sync_stale"`
 	Ghosts        int    `json:"ghosts"` // -1 = unknown (sweep failed)
 }

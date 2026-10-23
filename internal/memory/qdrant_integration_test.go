@@ -15,14 +15,14 @@ import (
 // (card #844): without it the tests SKIP, so plain `go test ./...` and
 // CI never require Docker. Run locally against a real Qdrant:
 //
-//	VIKTOR_QDRANT_TEST_URL=http://localhost:6333 go test ./internal/memory -run TestQdrantIntegration -v
+//	VIKTOR_QDRANT_TEST_URL=http://localhost:16333 go test ./internal/memory -run TestQdrantIntegration -v
 //
-// or `make test-integration` (docker compose profile "test").
+// or `make test-integration` (the target Qdrant instance).
 func qdrantIntegrationURL(t *testing.T) string {
 	t.Helper()
 	url := os.Getenv("VIKTOR_QDRANT_TEST_URL")
 	if url == "" {
-		t.Skip("integration test: set VIKTOR_QDRANT_TEST_URL to a real Qdrant (docker compose -f deploy/docker-compose.test.yml up -d)")
+		t.Skip("integration test: set VIKTOR_QDRANT_TEST_URL to a real Qdrant (make test-integration)")
 	}
 	return url
 }

@@ -93,10 +93,11 @@ printf '%s\n%s\n%s\n' \
 ```json
 {
   "memory": {
-    "qdrant_url": "http://localhost:6333",
+    "qdrant_url": "http://localhost:16333",
     "ollama_url": "http://localhost:11434",
     "embed_model": "bge-m3",
     "collection": "viktor_tasks",
+    "qdrant_api_key": "<если инстанс защищён ключом>",
     "hybrid_policy": "strict-slots",
     "git_enrich": {"main": "/path/to/repo"}
   }

@@ -12,11 +12,13 @@ build:
 test:
 	$(GO) test -race -count=1 $(PKG)
 
-# Card #844: live-Qdrant integration suite. Spins up a disposable
-# container, runs the suite, tears everything down.
+# Card #844: live-Qdrant integration suite against the target instance
+# (no Docker spin-up; a per-run collection is created and dropped).
+# Override with QDRANT_TEST_URL / QDRANT_TEST_API_KEY if it moves.
+QDRANT_TEST_URL ?= http://localhost:16333
+QDRANT_TEST_API_KEY ?=
 test-integration:
-	docker compose -f deploy/docker-compose.test.yml up -d --wait
-	@set +e; VIKTOR_QDRANT_TEST_URL=http://localhost:6333 $(GO) test -race -count=1 -run TestQdrantIntegration $(PKG); status=$$?; docker compose -f deploy/docker-compose.test.yml down -v; exit $$status
+	@set +e; VIKTOR_QDRANT_TEST_URL="$(QDRANT_TEST_URL)" VIKTOR_QDRANT_TEST_API_KEY="$(QDRANT_TEST_API_KEY)" $(GO) test -race -count=1 -run TestQdrantIntegration $(PKG); exit $$status
 
 lint:
 	golangci-lint run
