@@ -174,7 +174,9 @@ func (v *Verifier) taskChunkTitles(ctx context.Context, taskID int) map[string]b
 // title and its indexed copy compare equal despite markdown noise.
 func normAnchorText(s string) string {
 	s = strings.ToLower(strings.Join(strings.Fields(s), " "))
-	return strings.Trim(s, " \t.:!?,;:«»\"'`()*[]{}_")
+	return strings.TrimFunc(s, func(r rune) bool {
+		return unicode.IsSpace(r) || unicode.IsPunct(r)
+	})
 }
 
 func payloadTaskID(v any) (int, bool) {
