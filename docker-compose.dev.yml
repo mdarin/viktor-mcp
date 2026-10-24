@@ -56,8 +56,10 @@ services:
       retries: 30
     restart: unless-stopped
 
+  # Pinned, not :latest: latest moved to PG18 and a pre-PG18 paradedb-data
+  # volume restart-loops (card #868). Bump only with an upgrade path note.
   paradedb:
-    image: paradedb/paradedb:latest
+    image: paradedb/paradedb:0.26.2-pg17
     environment:
       POSTGRES_USER: viktor
       POSTGRES_PASSWORD: viktor
