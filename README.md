@@ -564,7 +564,7 @@ ParadeDB (`deploy/paradedb-init/01_search_history.sql`); Go-стор держи�
 
 ## Статус
 
-Актуальный релиз: **v0.8.1** (Go, 110 tools, unit + golden + surface-check +
+Актуальный релиз: **v0.9.0** (Go, 113 tools, unit + golden + surface-check +
 live-тесты против реального Vikunja v2.7.1).
 
 Пройдено и в бою: полный перенос апстрима; multi-instance; shadow-offline;
