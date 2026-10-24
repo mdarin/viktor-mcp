@@ -183,7 +183,7 @@ func (p *PG) List(ctx context.Context, taskID int64, limit int) ([]Record, error
 	if err := p.ensureSchema(ctx); err != nil {
 		return nil, ClassifyUnavailable(err)
 	}
-	rows, err := p.query(ctx, "task_id = $1 ORDER BY id DESC", args(taskID, limit))
+	rows, err := p.query(ctx, "task_id = $1 ORDER BY id DESC LIMIT $2", args(taskID, limit))
 	if err != nil {
 		return nil, err
 	}
