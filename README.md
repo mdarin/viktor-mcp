@@ -148,6 +148,33 @@ CLI-приоритет: флаг > `VIKTOR_MEMORY_*` env > секция `memory`
 `search_hybrid` содержит `sources: {exact, memory, merged}` — сколько
 строк дал каждый источник после дедупликации.
 
+### Секция history (опциональна, card #867)
+
+Лексический (BM25) поиск истории: tool `search_history` и CLI
+`viktor history sync|status`. Корпус — заголовки+описания задач и
+комментарии (тот же, что у семантической памяти, но ретрив BM25 через
+ParadeDB: точные коды ошибок, имена переменных, ID). Без секции tool
+отвечает `{supported:false}`, CLI — ошибку с подсказкой:
+
+```json
+{
+  "history": {
+    "pg_dsn": "postgres://viktor:PASSWORD@localhost:15432/viktor"
+  }
+}
+```
+
+```sh
+viktor history sync          # дельта с прошлого запуска
+viktor history sync -full    # полное пересканирование + чистка строк исчезнувших задач
+viktor history status        # сколько доков в индексе
+```
+
+Если расширение `pg_search` недоступно (не ParadeDB или версия с другим
+API), поиск автоматически падает в ILIKE-режим и помечает ответ
+`mode: "ilike"`. CLI-приоритет: флаг `-dsn` > `VIKTOR_HISTORY_PG_DSN`
+env > секция `history`.
+
 #### Секция repowise (опциональна)
 
 Опциональный digest change-risk в `verify_review` (не блокирующий):
@@ -362,6 +389,7 @@ go test ./internal/tools -update-snapshot
 | `reflection_log` | Log a reflection: how a goal conflict (quality vs speed, follow-up incident) was resolved. Stores in the reflection journal (PostgreSQL) and optionally posts a human-readable task comment. Use after design decisions, trade-offs, and incident post-mortems |
 | `search_all` | Search tasks and projects across instances |
 | `search_all_tasks` | List tasks across instances with filters |
+| `search_history` | Lexical (BM25) search over tracker history (task titles/descriptions and comments) indexed into ParadeDB by `viktor history sync`. Use for exact matches semantic memory_search is too fuzzy for: error codes, identifiers, variable names, task ids. Degrades to {supported:false} when no history DSN is configured or the database is down |
 | `search_hybrid` | Hybrid search: exact task filtering plus top-K semantic hits from the memory index (source=memory); memory issues degrade to a note, never fail |
 | `shadow_clear` | Remove already-synced entries from the shadow journal |
 | `shadow_status` | Show shadow-mode state: online/offline, pending queue size, mirror root |
@@ -522,7 +550,9 @@ docker compose -f docker-compose.dev.yml exec ollama ollama pull bge-m3
 ```
 
 `search_history` и BM25-индекс создаются автоматически при первом старте
-ParadeDB (`deploy/paradedb-init/01_search_history.sql`). Для `memory sync`
+ParadeDB (`deploy/paradedb-init/01_search_history.sql`); Go-стор держит
+свою идемпотентную миграцию (card #867). Корпус истории наполняется
+`viktor history sync` (dev-блок в `.env.example`). Для `memory sync`
 против стенда см. dev-блок в `.env.example`.
 
 ## Выбор SDK

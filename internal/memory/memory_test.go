@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -1079,4 +1080,32 @@ func TestSyncIndexesRepoFiles(t *testing.T) {
 		t.Fatalf("deleted file chunk must be removed: %+v", rep4)
 	}
 	_ = sp
+}
+
+// TestCommentUnmarshalAuthorForms covers the two author shapes Vikunja
+// deployments send (card #867 live-probe finding): a plain string and
+// the full user object. The object form must not break comment decode.
+func TestCommentUnmarshalAuthorForms(t *testing.T) {
+	stringForm := []byte(`{"id":7,"task_id":70,"comment":"hi","author":"crewai-agent"}`)
+	var c Comment
+	if err := json.Unmarshal(stringForm, &c); err != nil {
+		t.Fatal(err)
+	}
+	if c.Author != "crewai-agent" || c.Text != "hi" || c.ID != 7 {
+		t.Fatalf("string form: %+v", c)
+	}
+	objectForm := []byte(`{"id":8,"task_id":70,"comment":"ho","author":{"id":2,"username":"crewai-agent","name":""}}`)
+	if err := json.Unmarshal(objectForm, &c); err != nil {
+		t.Fatalf("object author must decode: %v", err)
+	}
+	if c.Author != "crewai-agent" || c.ID != 8 {
+		t.Fatalf("object form: %+v", c)
+	}
+	var list []Comment
+	if err := json.Unmarshal([]byte(`[{"id":1,"comment":"x","author":{"username":"u"}},{"id":2,"comment":"y","author":"s"}]`), &list); err != nil {
+		t.Fatalf("mixed list must decode: %v", err)
+	}
+	if len(list) != 2 || list[0].Author != "u" || list[1].Author != "s" {
+		t.Fatalf("mixed list: %+v", list)
+	}
 }

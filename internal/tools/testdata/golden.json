@@ -1564,6 +1564,37 @@
     "name": "search_all_tasks"
   },
   {
+    "description": "Lexical (BM25) search over tracker history (task titles/descriptions and comments) indexed into ParadeDB by `viktor history sync`. Use for exact matches semantic memory_search is too fuzzy for: error codes, identifiers, variable names, task ids. Degrades to {supported:false} when no history DSN is configured or the database is down",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "instance": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "limit": {
+          "type": "integer"
+        },
+        "project_id": {
+          "type": "integer"
+        },
+        "query": {
+          "type": "string"
+        },
+        "task_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "type": "object"
+    },
+    "name": "search_history"
+  },
+  {
     "description": "Hybrid search: exact task filtering plus top-K semantic hits from the memory index (source=memory); memory issues degrade to a note, never fail",
     "inputSchema": {
       "additionalProperties": false,

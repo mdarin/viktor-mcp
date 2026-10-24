@@ -1,13 +1,20 @@
 -- Инициализация search_history для ParadeDB (карточка #52).
 -- Монтируется в /docker-entrypoint-initdb.d — выполняется один раз
 -- при первом старте контейнера (когда дата-том пуст).
+--
+-- Card #867: Go-стор (internal/history) держит свою идемпотентную
+-- миграцию (CREATE TABLE IF NOT EXISTS + ALTER ADD COLUMN IF NOT
+-- EXISTS), так что таблица, созданная этим скриптом, дополняется
+-- колонками instance/history_key автоматически при первом запуске
+-- `viktor history sync`. kind — свободная таксономия; sync пишет
+-- 'task' (title+description+labels) и 'comment' (тело комментария).
 CREATE EXTENSION IF NOT EXISTS pg_search;
 
 CREATE TABLE search_history (
     id         BIGSERIAL PRIMARY KEY,
     task_id    BIGINT NOT NULL,
     project_id BIGINT NOT NULL,
-    kind       TEXT NOT NULL DEFAULT 'note', -- note | error | command
+    kind       TEXT NOT NULL DEFAULT 'note',
     content    TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

@@ -208,6 +208,10 @@ type Config struct {
 	// nil (or an empty PGDSN) means reflection_log / reflection_list
 	// answer {supported:false}.
 	Reflection *ReflectionSection
+	// History is the optional lexical-history config (card #867);
+	// nil (or an empty PGDSN) means search_history answers
+	// {supported:false}.
+	History *HistorySection
 	// Agent is the identity this server run serves (env VIKUNJA_AGENT);
 	// empty means the operator token is used everywhere.
 	Agent string
@@ -220,6 +224,7 @@ type fileConfig struct {
 	Repowise        *fileRepowiseIn           `json:"repowise"`
 	Board           *BoardSection             `json:"board"`
 	Reflection      *fileReflectionIn         `json:"reflection"`
+	History         *fileHistoryIn            `json:"history"`
 }
 
 // fileReflectionIn is the reflection-journal config (card #853).
@@ -234,6 +239,18 @@ type fileReflectionIn struct {
 type ReflectionSection struct {
 	PGDSN string
 	Repo  string
+}
+
+// fileHistoryIn is the lexical-history config (card #867).
+type fileHistoryIn struct {
+	PGDSN string `json:"pg_dsn"`
+}
+
+// HistorySection configures the BM25 history search (card #867): the
+// ParadeDB/PostgreSQL DSN hosting the `search_history` table fed by
+// `viktor history sync`.
+type HistorySection struct {
+	PGDSN string
 }
 
 type fileRepowiseIn struct {
@@ -415,6 +432,9 @@ func (c *Config) applyFile(fc *fileConfig) error {
 	if fc.Reflection != nil {
 		c.Reflection = &ReflectionSection{PGDSN: fc.Reflection.PGDSN, Repo: fc.Reflection.Repo}
 	}
+	if fc.History != nil {
+		c.History = &HistorySection{PGDSN: fc.History.PGDSN}
+	}
 	return nil
 }
 
@@ -439,6 +459,18 @@ func (c *Config) applyEnv(env map[string]string) error {
 	}
 	if refl.PGDSN != "" {
 		c.Reflection = refl
+	}
+	// History search env (card #867): global section, env wins over the
+	// file per key.
+	hist := c.History
+	if hist == nil {
+		hist = &HistorySection{}
+	}
+	if v := env["VIKTOR_HISTORY_PG_DSN"]; v != "" {
+		hist.PGDSN = strings.TrimSpace(v)
+	}
+	if hist.PGDSN != "" {
+		c.History = hist
 	}
 	get := func(inst, key string) (string, bool) {
 		if inst == "default" {

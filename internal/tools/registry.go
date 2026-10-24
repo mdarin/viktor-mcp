@@ -14,6 +14,7 @@ import (
 
 	"viktor/internal/client"
 	"viktor/internal/config"
+	"viktor/internal/history"
 	"viktor/internal/memory"
 	"viktor/internal/reflection"
 	"viktor/internal/shadow"
@@ -53,6 +54,9 @@ type Registry struct {
 	// reflection journal config and per-instance store cache (card #853)
 	reflectCfgs   map[string]reflection.Config
 	reflectStores map[string]reflection.Store
+	// history search config and per-instance store cache (card #867)
+	histCfgs   map[string]history.Config
+	histStores map[string]history.Store
 	// repowise enables the optional change-risk digest in verify_review
 	// (card #823); nil = feature off.
 	repowise *config.RepowiseSection
@@ -283,6 +287,7 @@ func (r *Registry) RegisterAll() {
 	registerBots(r)
 	registerMemory(r)
 	registerReflection(r)
+	registerHistory(r)
 	registerFsm(r)
 	registerWatchdog(r)
 	registerVerifier(r)

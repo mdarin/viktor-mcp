@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -23,12 +24,42 @@ type Task struct {
 	Labels      []Label `json:"labels"`
 }
 
-// Comment is a task comment.
+// Comment is a task comment. Vikunja returns `author` either as a
+// plain string or as a full user object depending on the deployment;
+// UnmarshalJSON accepts both (found by the history sync live probe,
+// card #867 — the object form made every comment decode fail).
 type Comment struct {
 	ID     int64  `json:"id"`
 	TaskID int64  `json:"task_id"`
 	Text   string `json:"comment"`
-	Author string `json:"author"`
+	Author string `json:"-"`
+}
+
+// UnmarshalJSON implements json.Unmarshaler for Comment.
+func (c *Comment) UnmarshalJSON(data []byte) error {
+	type alias Comment // shadow the method to avoid recursion
+	var a struct {
+		alias
+		Author json.RawMessage `json:"author"`
+	}
+	if err := json.Unmarshal(data, &a); err != nil {
+		return err
+	}
+	*c = Comment(a.alias)
+	if len(a.Author) > 0 && string(a.Author) != "null" {
+		var s string
+		if err := json.Unmarshal(a.Author, &s); err == nil {
+			c.Author = s
+		} else {
+			var u struct {
+				Username string `json:"username"`
+			}
+			if json.Unmarshal(a.Author, &u) == nil {
+				c.Author = u.Username
+			}
+		}
+	}
+	return nil
 }
 
 // ChunkType distinguishes task chunks from comment chunks.

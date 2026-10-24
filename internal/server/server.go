@@ -11,6 +11,7 @@ import (
 
 	"viktor/internal/client"
 	"viktor/internal/config"
+	"viktor/internal/history"
 	"viktor/internal/memory"
 	"viktor/internal/reflection"
 	"viktor/internal/shadow"
@@ -88,6 +89,16 @@ func Build(_ context.Context, stdout io.Writer) (*mcp.Server, *tools.Registry, e
 			reflCfgs[name] = reflection.Config{PGDSN: cfg.Reflection.PGDSN, Repo: cfg.Reflection.Repo}
 		}
 		registry.SetReflectionConfigs(reflCfgs)
+	}
+	// Lexical history search (card #867): one global section expanded to
+	// every configured instance; rows are filtered per instance at sync
+	// and query time.
+	if cfg.History != nil && cfg.History.PGDSN != "" {
+		histCfgs := make(map[string]history.Config, len(cfg.Instances))
+		for name := range cfg.Instances {
+			histCfgs[name] = history.Config{PGDSN: cfg.History.PGDSN}
+		}
+		registry.SetHistoryConfigs(histCfgs)
 	}
 	registry.SetBoard(cfg.Board)
 	registry.RegisterAll()
