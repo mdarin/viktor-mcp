@@ -156,7 +156,7 @@ func handleReflectionLog(r *Registry) mcp.ToolHandlerFor[ReflectionLogIn, any] {
 				out["comment_error"] = fmt.Sprintf("no client for instance %q", in.Instance)
 			} else {
 				var commentID any
-				if err := api.AddComment(ctx, int(in.TaskID), reflectionCommentText(id, in), &commentID); err != nil {
+				if err := api.AddComment(ctx, int(in.TaskID), map[string]any{"comment": reflectionCommentText(id, in)}, &commentID); err != nil {
 					out["comment_error"] = err.Error() // journal row is saved; the copy is best-effort
 				} else {
 					out["comment_posted"] = true
