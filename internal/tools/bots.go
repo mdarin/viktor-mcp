@@ -32,6 +32,16 @@ type BotTokenCreateIn struct {
 	Permissions   map[string][]string `json:"permissions,omitempty"`
 }
 
+// jwtRequired explains the 401 the upstream returns for user/bot
+// management under an API token (card #892): these endpoints accept only
+// the owner's JWT, never a tk_ API token.
+func jwtRequired(r *Registry) error {
+	if r.api().AuthKind() == "api-token" {
+		return fmt.Errorf("bot_* requires the owner's JWT: the configured Vikunja API token (tk_...) is rejected by upstream user-management endpoints with 401; configure a JWT (from UI login) for this instance to manage bots")
+	}
+	return nil
+}
+
 // defaultBotTokenDays keeps minted bot tokens long-lived but finite:
 // upstream requires a non-null expiry, so "no expiry" is unreachable
 // (spike card #54); we default to a year and surface the rotation hint.
@@ -41,6 +51,9 @@ const maxBotTokenDays = 3650
 
 func handleBotList(r *Registry) mcp.ToolHandlerFor[BotListIn, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, _ BotListIn) (*mcp.CallToolResult, any, error) {
+		if err := jwtRequired(r); err != nil {
+			return nil, nil, err
+		}
 		var bots []map[string]any
 		if err := r.api().ListBots(ctx, &bots); err != nil {
 			return nil, nil, err
@@ -56,6 +69,9 @@ func handleBotCreate(r *Registry) mcp.ToolHandlerFor[BotCreateIn, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in BotCreateIn) (*mcp.CallToolResult, any, error) {
 		if in.Username == "" {
 			return nil, nil, fmt.Errorf("username is required")
+		}
+		if err := jwtRequired(r); err != nil {
+			return nil, nil, err
 		}
 		// Upstream requirement: bot usernames must start with "bot-".
 		if !strings.HasPrefix(in.Username, "bot-") {
@@ -82,6 +98,9 @@ func handleBotDisable(r *Registry) mcp.ToolHandlerFor[BotDisableIn, any] {
 		if in.BotID == 0 {
 			return nil, nil, fmt.Errorf("bot_id is required")
 		}
+		if err := jwtRequired(r); err != nil {
+			return nil, nil, err
+		}
 		var bot map[string]any
 		if err := r.api().UpdateBot(ctx, in.BotID, map[string]any{"status": 2}, &bot); err != nil {
 			return nil, nil, err
@@ -99,6 +118,9 @@ func handleBotDelete(r *Registry) mcp.ToolHandlerFor[BotDeleteIn, any] {
 		if in.BotID == 0 {
 			return nil, nil, fmt.Errorf("bot_id is required")
 		}
+		if err := jwtRequired(r); err != nil {
+			return nil, nil, err
+		}
 		if err := r.api().DeleteBot(ctx, in.BotID); err != nil {
 			return nil, nil, err
 		}
@@ -113,6 +135,9 @@ func handleBotTokenCreate(r *Registry) mcp.ToolHandlerFor[BotTokenCreateIn, any]
 		}
 		if in.Title == "" {
 			return nil, nil, fmt.Errorf("title is required")
+		}
+		if err := jwtRequired(r); err != nil {
+			return nil, nil, err
 		}
 		days := in.ExpiresInDays
 		if days <= 0 {

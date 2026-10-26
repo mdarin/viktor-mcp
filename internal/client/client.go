@@ -82,6 +82,20 @@ func NewWithAPI(baseURL, token string, timeout time.Duration, apiVersion string)
 // APIVersion returns the URL prefix version this client talks to.
 func (c *Client) APIVersion() string { return c.api }
 
+// AuthKind classifies the configured credential: Vikunja API tokens
+// start with "tk_", JWTs with "eyJ" (card #892). Upstream user/bot
+// management endpoints accept only the owner's JWT.
+func (c *Client) AuthKind() string {
+	switch {
+	case strings.HasPrefix(c.token, "tk_"):
+		return "api-token"
+	case strings.HasPrefix(c.token, "eyJ"):
+		return "jwt"
+	default:
+		return "unknown"
+	}
+}
+
 // createVerb picks the create-method verb per API version: Vikunja v1
 // creates with PUT, v2 with POST (verified live on 2.7.1, card #56).
 func (c *Client) createVerb(ctx context.Context, path string, body, out any) error {

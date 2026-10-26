@@ -875,3 +875,19 @@ func TestTaskGetEnrichesBucket(t *testing.T) {
 		t.Fatalf("bucket enrichment failed: bucket_id=%v bucket_title=%v", out["bucket_id"], out["bucket_title"])
 	}
 }
+
+func TestTaskCreatePlacesInFirstBucket(t *testing.T) {
+	f, session := newCRUDFixture(t)
+	out, err := callCRUD(t, session, "task_create", map[string]any{"project_id": 8, "title": "parked"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Fresh work must not land in the view's done bucket (card #893):
+	// the first non-done bucket (41 "To-Do") is the default placement.
+	if out["bucket_id"] != float64(41) || out["bucket_title"] != "To-Do" {
+		t.Fatalf("bucket placement = %v/%v, want 41/To-Do", out["bucket_id"], out["bucket_title"])
+	}
+	if len(f.moves) != 1 || f.moves[0]["task_id"] != out["id"] {
+		t.Fatalf("moves = %v", f.moves)
+	}
+}

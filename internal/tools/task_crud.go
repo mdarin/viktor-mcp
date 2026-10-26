@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -11,10 +12,16 @@ import (
 	"viktor/internal/client"
 )
 
+// asFloat converts a JSON number (decoded as float64) to float64.
+func asFloat(v any) float64 {
+	f, _ := v.(float64)
+	return f
+}
+
 const zeroDate = "0001-01-01T00:00:00Z"
 
 func trimTask(m map[string]any) map[string]any {
-	keys := []string{"id", "title", "description", "done", "due_date", "start_date", "priority", "project_id", "bucket_id", "labels", "assignees", "reminders", "hex_color"}
+	keys := []string{"id", "title", "description", "done", "due_date", "start_date", "priority", "project_id", "bucket_id", "bucket_title", "labels", "assignees", "reminders", "hex_color"}
 	out := make(map[string]any, len(keys))
 	for _, k := range keys {
 		if v, ok := m[k]; ok {
@@ -75,6 +82,46 @@ func handleTaskGet(r *Registry) mcp.ToolHandlerFor[TaskGetIn, any] {
 	}
 }
 
+// placeNewTask puts a freshly created task into the first non-done bucket
+// of the project's kanban view. Server-side Vikunja 2.7.1 surfaces a
+// bucketless task in the view's done bucket, which hides fresh work as
+// finished (card #893). Projects without a kanban view keep the old
+// behavior.
+func placeNewTask(ctx context.Context, r *Registry, projectID, taskID int) (int, string, error) {
+	viewID, err := findKanbanViewID(ctx, r, projectID)
+	if err != nil {
+		return 0, "", err
+	}
+	var buckets []map[string]any
+	if err := r.api().ListBuckets(ctx, projectID, viewID, &buckets); err != nil {
+		return 0, "", err
+	}
+	// ListBuckets order is not guaranteed to be positional; pick the
+	// non-done bucket with the smallest position.
+	sort.SliceStable(buckets, func(i, j int) bool {
+		return asFloat(buckets[i]["position"]) < asFloat(buckets[j]["position"])
+	})
+	target := map[string]any(nil)
+	for _, b := range buckets {
+		if strings.EqualFold(b["title"].(string), "done") {
+			continue
+		}
+		target = b
+		break
+	}
+	if target == nil && len(buckets) > 0 {
+		target = buckets[0]
+	}
+	if target == nil {
+		return 0, "", fmt.Errorf("project %d has no buckets", projectID)
+	}
+	if err := moveTaskToBucket(ctx, r, projectID, viewID, asInt(target["id"]), taskID); err != nil {
+		return 0, "", err
+	}
+	title, _ := target["title"].(string)
+	return asInt(target["id"]), title, nil
+}
+
 func handleTaskCreate(r *Registry) mcp.ToolHandlerFor[TaskCreateIn, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in TaskCreateIn) (*mcp.CallToolResult, any, error) {
 		if in.Title == "" {
@@ -109,6 +156,12 @@ func handleTaskCreate(r *Registry) mcp.ToolHandlerFor[TaskCreateIn, any] {
 		var created map[string]any
 		if err := r.api().CreateTask(ctx, in.ProjectID, body, &created); err != nil {
 			return nil, nil, err
+		}
+		// Fresh work must not surface as finished: park the task in the
+		// first non-done bucket instead of the server default (card #893).
+		if bucketID, bucketTitle, err := placeNewTask(ctx, r, in.ProjectID, asInt(created["id"])); err == nil {
+			created["bucket_id"] = bucketID
+			created["bucket_title"] = bucketTitle
 		}
 		if len(in.Labels) > 0 {
 			labelIDs, err := resolveLabels(ctx, r, in.Labels, false)
