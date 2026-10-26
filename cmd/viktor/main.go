@@ -24,6 +24,7 @@ import (
 	"viktor/internal/reflection"
 	"viktor/internal/server"
 	"viktor/internal/shadow"
+	"viktor/internal/syncd"
 	"viktor/internal/tools"
 	"viktor/internal/watchdog"
 )
@@ -49,6 +50,12 @@ func main() {
 		case "watchdog":
 			if err := runWatchdog(ctx, os.Args[2:]); err != nil {
 				fmt.Fprintln(os.Stderr, "viktor watchdog:", err)
+				os.Exit(1)
+			}
+			return
+		case "syncd":
+			if err := runSyncd(ctx, os.Args[2:]); err != nil {
+				fmt.Fprintln(os.Stderr, "viktor syncd:", err)
 				os.Exit(1)
 			}
 			return
@@ -167,66 +174,11 @@ func runMemory(ctx context.Context, args []string) error {
 			explicit["repo"] = *repo
 		}
 	})
-	var memSection *config.MemorySection
-	if cfg.Memory != nil {
-		memSection = cfg.Memory
-	}
-	pick := func(flagName, envKey, cfgVal string) string {
-		if v, ok := explicit[flagName]; ok {
-			return v
-		}
-		if v := os.Getenv(envKey); v != "" {
-			return v
-		}
-		return cfgVal
-	}
-	memCfg := memory.Config{
-		Instance:       instName,
-		QdrantURL:      pick("qdrant", "VIKTOR_MEMORY_QDRANT_URL", memSection.Qdrant()),
-		OllamaURL:      pick("ollama", "VIKTOR_MEMORY_OLLAMA_URL", memSection.Ollama()),
-		EmbedModel:     pick("model", "VIKTOR_MEMORY_EMBED_MODEL", memSection.Model()),
-		Collection:     pick("collection", "VIKTOR_MEMORY_COLLECTION", memSection.Coll()),
-		QdrantAPIKey:   pick("apikey", "VIKTOR_MEMORY_QDRANT_API_KEY", memSection.QdrantKey()),
-		GitRepo:        pick("repo", "VIKTOR_MEMORY_GIT_REPO", memSection.RepoFor(instName)),
-		FullSyncMaxAge: time.Duration(memSection.FullSyncHoursOrDefault()) * time.Hour,
-		FilePatterns:   memSection.FilePatterns,
-		HybridPolicy:   memSection.HybridPolicy,
-	}
-	if memCfg.GitRepo == "" {
-		// "Index the current repository": repo history joins the board
-		// projection by default.
-		if wd, err := os.Getwd(); err == nil {
-			memCfg.GitRepo = wd
-		}
-	}
-	memCfg = memCfg.WithDefaults()
-
-	// Card #47 contract: no memory section and no env/flag overrides →
-	// a clear error with a hint, not a silent localhost run.
-	if cfg.Memory == nil && len(explicit) == 0 && !hasMemoryEnv() {
-		return fmt.Errorf("memory is not configured: add a \"memory\" section to %s (see .env.example) or set VIKTOR_MEMORY_* env / pass -qdrant/-ollama flags", config.DefaultPath())
-	}
-
-	api := client.NewWithAPI(inst.URL, inst.TokenFor(cfg.Agent), inst.Timeout, inst.API).SetRateLimit(inst.RateLimit)
-	store, err := shadow.NewStore("", instName)
-	if err != nil {
-		return fmt.Errorf("shadow store: %w", err)
-	}
-
-	ix, err := memory.NewIndexer(memCfg, memory.NewSource(api, store), memory.NewOllama(memCfg.OllamaURL), memory.NewQdrant(memCfg.QdrantURL, memCfg.QdrantAPIKey), gitEnricher(memCfg), memory.DefaultStatePath(instName))
+	ix, closeReflection, err := buildMemoryIndexer(cfg, inst, instName, explicit)
 	if err != nil {
 		return err
 	}
-	// Reflection journal feed (card #853): when a DSN is configured, new
-	// reflection records join the projection; a down journal only shows
-	// up as report.reflections_error, never fails the sync.
-	if cfg.Reflection != nil && cfg.Reflection.PGDSN != "" {
-		rstore, rerr := reflection.NewPG(reflection.Config{PGDSN: cfg.Reflection.PGDSN, Repo: cfg.Reflection.Repo})
-		if rerr == nil {
-			ix.SetReflectionSource(pgReflectionSource{rstore})
-			defer func() { _ = rstore.Close() }()
-		}
-	}
+	defer closeReflection()
 
 	if *status {
 		st, err := ix.Status(ctx)
@@ -365,19 +317,33 @@ func runHistory(ctx context.Context, args []string) error {
 	source := memory.NewSource(api, shadowStore)
 
 	statePath := filepath.Join(memory.DefaultStateRoot(), "history", instName+".json")
+	rep, err := syncHistoryOnce(ctx, instName, source, st, statePath, *full)
+	if err != nil {
+		return err
+	}
+	return printJSON(rep)
+}
+
+// syncHistoryOnce runs one history pass and returns the report without
+// printing it — the pure core of `viktor history sync` that syncd reuses
+// every tick (card #880). full forces a full rescan; a delta pass reads
+// the cursor from statePath. Unreachable-tracker-with-empty-mirror is
+// reported as a clear error by the caller wiring (same message as the
+// memory sync).
+func syncHistoryOnce(ctx context.Context, instName string, source memory.TaskSource, st historyStore, statePath string, full bool) (map[string]any, error) {
 	cursor := loadHistoryCursor(statePath)
 	mode := "delta"
 	since := cursor
-	if *full {
+	if full {
 		mode = "full"
 		since = ""
 	}
 	batch, err := source.AllTasks(ctx, since)
 	if err != nil {
 		if errors.Is(err, client.ErrUnreachable) && strings.Contains(err.Error(), "fetch tasks") {
-			return fmt.Errorf("tracker unreachable and shadow mirror has no tasks: run sync while online first")
+			return nil, fmt.Errorf("tracker unreachable and shadow mirror has no tasks: run sync while online first")
 		}
-		return err
+		return nil, err
 	}
 	if mode == "delta" && batch.Complete {
 		// The source could not filter (shadow mirror, filter fallback):
@@ -420,7 +386,7 @@ func runHistory(ctx context.Context, args []string) error {
 			})
 		}
 		if err := st.ReplaceTask(ctx, docs); err != nil {
-			return fmt.Errorf("task %d: %w", t.ID, err)
+			return nil, fmt.Errorf("task %d: %w", t.ID, err)
 		}
 		docsTotal += int64(len(docs))
 		if t.Updated > newest {
@@ -431,16 +397,16 @@ func runHistory(ctx context.Context, args []string) error {
 	if batch.Complete {
 		ghosts, err = st.DeleteNotIn(ctx, instName, live)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 	if newest > cursor {
 		cursor = newest
 	}
 	if err := saveHistoryCursor(statePath, cursor); err != nil {
-		return fmt.Errorf("state: %w", err)
+		return nil, fmt.Errorf("state: %w", err)
 	}
-	return printJSON(map[string]any{
+	return map[string]any{
 		"source":         source.Name(),
 		"instance":       instName,
 		"mode":           mode,
@@ -449,7 +415,14 @@ func runHistory(ctx context.Context, args []string) error {
 		"comment_errors": commentErrors,
 		"ghosts_deleted": ghosts,
 		"cursor":         cursor,
-	})
+	}, nil
+}
+
+// historyStore is the slice of the history PG store the sync writes
+// through; faked in tests.
+type historyStore interface {
+	ReplaceTask(ctx context.Context, docs []history.Doc) error
+	DeleteNotIn(ctx context.Context, instance string, taskIDs []int64) (int64, error)
 }
 
 // historyTaskText renders the task doc content: title, description and
@@ -555,6 +528,216 @@ func runWatchdog(ctx context.Context, args []string) error {
 		return nil
 	}
 	return err
+}
+
+// errMemoryUnconfigured marks the card #47 contract: no memory section
+// and no env/flag overrides. syncd treats it as "disable the memory
+// syncer", not as a fatal startup error.
+var errMemoryUnconfigured = errors.New("memory is not configured")
+
+// buildMemoryIndexer constructs the semantic memory indexer from config
+// and env — the shared wiring of `viktor memory sync` and syncd (card
+// #880). explicit holds flag overrides ("qdrant", "ollama", "model",
+// "collection", "repo"); syncd passes nil. The returned closer releases
+// optional resources (the reflection PG feed) and is always non-nil.
+func buildMemoryIndexer(cfg *config.Config, inst *config.Instance, instName string, explicit map[string]string) (*memory.Indexer, func(), error) {
+	var memSection *config.MemorySection
+	if cfg.Memory != nil {
+		memSection = cfg.Memory
+	}
+	pick := func(flagName, envKey, cfgVal string) string {
+		if v, ok := explicit[flagName]; ok {
+			return v
+		}
+		if v := os.Getenv(envKey); v != "" {
+			return v
+		}
+		return cfgVal
+	}
+	memCfg := memory.Config{
+		Instance:       instName,
+		QdrantURL:      pick("qdrant", "VIKTOR_MEMORY_QDRANT_URL", memSection.Qdrant()),
+		OllamaURL:      pick("ollama", "VIKTOR_MEMORY_OLLAMA_URL", memSection.Ollama()),
+		EmbedModel:     pick("model", "VIKTOR_MEMORY_EMBED_MODEL", memSection.Model()),
+		Collection:     pick("collection", "VIKTOR_MEMORY_COLLECTION", memSection.Coll()),
+		QdrantAPIKey:   pick("apikey", "VIKTOR_MEMORY_QDRANT_API_KEY", memSection.QdrantKey()),
+		GitRepo:        pick("repo", "VIKTOR_MEMORY_GIT_REPO", memSection.RepoFor(instName)),
+		FullSyncMaxAge: time.Duration(memSection.FullSyncHoursOrDefault()) * time.Hour,
+		FilePatterns:   memSection.FilePatterns,
+		HybridPolicy:   memSection.HybridPolicy,
+	}
+	if memCfg.GitRepo == "" {
+		// "Index the current repository": repo history joins the board
+		// projection by default.
+		if wd, err := os.Getwd(); err == nil {
+			memCfg.GitRepo = wd
+		}
+	}
+	memCfg = memCfg.WithDefaults()
+
+	// Card #47 contract: no memory section and no env/flag overrides →
+	// a clear error with a hint, not a silent localhost run.
+	if cfg.Memory == nil && len(explicit) == 0 && !hasMemoryEnv() {
+		return nil, nil, fmt.Errorf("%w: add a \"memory\" section to %s (see .env.example) or set VIKTOR_MEMORY_* env / pass -qdrant/-ollama flags", errMemoryUnconfigured, config.DefaultPath())
+	}
+
+	api := client.NewWithAPI(inst.URL, inst.TokenFor(cfg.Agent), inst.Timeout, inst.API).SetRateLimit(inst.RateLimit)
+	store, err := shadow.NewStore("", instName)
+	if err != nil {
+		return nil, nil, fmt.Errorf("shadow store: %w", err)
+	}
+
+	ix, err := memory.NewIndexer(memCfg, memory.NewSource(api, store), memory.NewOllama(memCfg.OllamaURL), memory.NewQdrant(memCfg.QdrantURL, memCfg.QdrantAPIKey), gitEnricher(memCfg), memory.DefaultStatePath(instName))
+	if err != nil {
+		return nil, nil, err
+	}
+	// Reflection journal feed (card #853): when a DSN is configured, new
+	// reflection records join the projection; a down journal only shows
+	// up as report.reflections_error, never fails the sync.
+	closer := func() {}
+	if cfg.Reflection != nil && cfg.Reflection.PGDSN != "" {
+		rstore, rerr := reflection.NewPG(reflection.Config{PGDSN: cfg.Reflection.PGDSN, Repo: cfg.Reflection.Repo})
+		if rerr == nil {
+			ix.SetReflectionSource(pgReflectionSource{rstore})
+			closer = func() { _ = rstore.Close() }
+		}
+	}
+	return ix, closer, nil
+}
+
+// historySyncer adapts the pure syncHistoryOnce pass to the syncd
+// contract (card #880): every tick opens a fresh cursor read, one PG
+// store lives for the daemon's lifetime (lazily connected, card #867).
+type historySyncer struct {
+	instName  string
+	source    memory.TaskSource
+	store     historyStore
+	statePath string
+}
+
+func (h historySyncer) Sync(ctx context.Context, full bool) (map[string]any, error) {
+	return syncHistoryOnce(ctx, h.instName, h.source, h.store, h.statePath, full)
+}
+
+// runSyncd implements `viktor syncd` — the single daemon that keeps both
+// projections fresh (card #880): every tick syncs the semantic memory
+// and the lexical history sequentially (one index failing never stops
+// the other), a full rescan of both runs once per -full-interval for
+// ghost cleanup. Graceful shutdown on SIGTERM/SIGINT; a stale-lock guard
+// (flock on the state file) keeps two parallel syncd from interleaving.
+func runSyncd(ctx context.Context, args []string) error {
+	loadDotenv(".env")
+	fs := flag.NewFlagSet("syncd", flag.ContinueOnError)
+	once := fs.Bool("once", false, "run one tick of both indexes and exit")
+	full := fs.Bool("full", false, "with -once: force a full rescan (ghost cleanup)")
+	interval := fs.Duration("interval", syncd.DefaultInterval, "delta tick interval in loop mode")
+	fullInterval := fs.Duration("full-interval", syncd.DefaultFullInterval, "full rescan cadence in loop mode")
+	instance := fs.String("instance", "", "tracker instance name (default: config default)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() > 0 {
+		return fmt.Errorf("unknown syncd argument %q", fs.Arg(0))
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	instName := *instance
+	if instName == "" {
+		instName = cfg.DefaultInstance
+	}
+	inst, ok := cfg.Instances[instName]
+	if !ok {
+		return fmt.Errorf("instance %q is not configured", instName)
+	}
+
+	// Memory syncer: unconfigured memory degrades to a per-tick report
+	// line, not a daemon failure (the two indexes are independent).
+	memIX, closeReflection, memErr := buildMemoryIndexer(cfg, inst, instName, nil)
+	if memErr != nil && !errors.Is(memErr, errMemoryUnconfigured) {
+		return memErr
+	}
+	var (
+		memSyncer    syncd.MemorySyncer
+		memDisabled  string
+		closeMemory  = func() {}
+		histDisabled string
+		histSyncer   syncd.HistorySyncer
+	)
+	if memErr != nil {
+		memDisabled = memErr.Error()
+	} else {
+		memSyncer = memIX
+		closeMemory = closeReflection
+	}
+	defer closeMemory()
+
+	// History syncer: a missing DSN degrades the same way.
+	pgDSN := os.Getenv("VIKTOR_HISTORY_PG_DSN")
+	if pgDSN == "" && cfg.History != nil {
+		pgDSN = cfg.History.PGDSN
+	}
+	if pgDSN == "" {
+		histDisabled = "history is not configured: set VIKTOR_HISTORY_PG_DSN or add a \"history\" section to " + config.DefaultPath()
+	} else {
+		hstore, herr := history.NewPG(history.Config{PGDSN: pgDSN})
+		if herr != nil {
+			return herr
+		}
+		defer func() { _ = hstore.Close() }()
+		api := client.NewWithAPI(inst.URL, inst.TokenFor(cfg.Agent), inst.Timeout, inst.API).SetRateLimit(inst.RateLimit)
+		shadowStore, err := shadow.NewStore("", instName)
+		if err != nil {
+			return fmt.Errorf("shadow store: %w", err)
+		}
+		histSyncer = historySyncer{
+			instName:  instName,
+			source:    memory.NewSource(api, shadowStore),
+			store:     hstore,
+			statePath: filepath.Join(memory.DefaultStateRoot(), "history", instName+".json"),
+		}
+	}
+	if memSyncer == nil && histSyncer == nil {
+		return fmt.Errorf("syncd: nothing to sync\n  - %s\n  - %s", memDisabled, histDisabled)
+	}
+	d := &syncd.Daemon{
+		Memory:             memSyncer,
+		History:            histSyncer,
+		MemoryUnavailable:  memDisabled,
+		HistoryUnavailable: histDisabled,
+	}
+
+	// Stale-lock guard: an exclusive flock on the per-instance state
+	// file; a second syncd exits with a clear message instead of
+	// interleaving its ticks with the running one.
+	lockDir := filepath.Join(memory.DefaultStateRoot(), "syncd")
+	if err := os.MkdirAll(lockDir, 0o700); err != nil {
+		return fmt.Errorf("syncd lock dir: %w", err)
+	}
+	lock, err := syncd.AcquireLock(filepath.Join(lockDir, instName+".lock"))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = lock.Close() }()
+
+	logger := log.New(os.Stderr, "", log.LstdFlags)
+	if *once {
+		rep := d.Tick(ctx, *full)
+		if err := printJSON(rep); err != nil {
+			return err
+		}
+		if !rep.OK() {
+			return fmt.Errorf("syncd tick finished with errors (memory: %q, history: %q)", rep.MemoryError, rep.HistoryError)
+		}
+		return nil
+	}
+	return syncd.Loop(ctx, d, *interval, *fullInterval, logger, func(rep *syncd.TickReport) {
+		// Pretty JSON per tick on stdout; the loop itself keeps
+		// running regardless of per-index errors.
+		_ = printJSON(rep)
+	})
 }
 
 func gitEnricher(cfg memory.Config) memory.GitEnricher {

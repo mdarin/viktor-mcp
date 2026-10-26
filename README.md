@@ -175,6 +175,44 @@ API), поиск автоматически падает в ILIKE-режим и 
 `mode: "ilike"`. CLI-приоритет: флаг `-dsn` > `VIKTOR_HISTORY_PG_DSN`
 env > секция `history`.
 
+#### Автоматизация синхов: `viktor syncd` (card #880)
+
+Дельта-синхи обеих проекций без cron-зоопарка: один демон, один тик
+гоняет `memory.Sync` и `history` последовательно; полные пересканирования
+(чистка «призраков» удалённых задач) — раз в `-full-interval`. Ошибка
+одного индекса не валит второй — она попадает в отчёт тика полями
+`memory_error` / `history_error`. Если memory или history не сконфигурированы,
+соответствующий синх просто отключается (строка-причина в каждом тике);
+не сконфигурированы оба — ошибка старта.
+
+```sh
+viktor syncd                        # цикл: дельта каждые 15m, фулл каждые 24h
+viktor syncd -interval 5m -full-interval 6h
+viktor syncd -instance my-instance  # не default-инстанс
+viktor syncd -once                  # один тик обоих индексов и выход (cron-режим)
+viktor syncd -once -full            # то же с полным пересканированием (ночной cron)
+```
+
+Тик печатает JSON-отчёт в stdout (тот же формат, что у `memory sync` /
+`history sync`), служебные строки — в stderr. Завершение — по SIGTERM/SIGINT,
+штатно: текущий тик доезжает, процесс выходит 0.
+
+Защита от параллельного запуска: flock на
+`~/.local/state/viktor/syncd/<instance>.lock` — второй syncd с тем же
+инстансом завершится с сообщением «another instance holds the lock».
+
+Готовые юниты:
+
+- macOS: `deploy/launchd/com.viktor.syncd.plist` (LaunchAgent,
+  `KeepAlive` + перезапуск при падении);
+- Linux: `deploy/systemd/viktor-syncd.service` (user-unit,
+  `Restart=on-failure`).
+
+Оба запускают `viktor syncd` из рабочего каталога, где лежит `.env`
+с секциями `memory` и `history`; пути к бинарнику и каталогу поправьте
+под себя (метки `CHANGE_ME` в plist).
+
+
 #### Секция repowise (опциональна)
 
 Опциональный digest change-risk в `verify_review` (не блокирующий):

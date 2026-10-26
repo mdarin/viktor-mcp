@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  launchd example for `viktor syncd` (card #880): keeps the memory
+  (Qdrant) and history (ParadeDB) projections fresh on a logged-in Mac.
+
+  Install:
+    cp deploy/launchd/com.viktor.syncd.plist ~/Library/LaunchAgents/
+    # adjust the binary path and the working directory (a .env with the
+    # memory/history sections is loaded from there)
+    launchctl load ~/Library/LaunchAgents/com.viktor.syncd.plist
+
+  Logs: /tmp/viktor-syncd.out.log /tmp/viktor-syncd.err.log
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.viktor.syncd</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/CHANGE_ME/.local/bin/viktor</string>
+        <string>syncd</string>
+        <string>-interval</string>
+        <string>15m</string>
+        <string>-full-interval</string>
+        <string>24h</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/CHANGE_ME/projects/my-mcp/viktor</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StartInterval</key>
+    <!-- watchdog only: relaunch if the daemon died; syncd itself loops -->
+    <integer>60</integer>
+    <key>StandardOutPath</key>
+    <string>/tmp/viktor-syncd.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/viktor-syncd.err.log</string>
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+</dict>
+</plist>

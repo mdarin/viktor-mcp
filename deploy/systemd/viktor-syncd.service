@@ -1,0 +1,28 @@
+# systemd example for `viktor syncd` (card #880): keeps the memory
+# (Qdrant) and history (ParadeDB) projections fresh on a Linux box.
+#
+# Install:
+#   cp deploy/systemd/viktor-syncd.service ~/.config/systemd/user/
+#   # adjust the binary path and WorkingDirectory (a .env with the
+#   # memory/history sections is loaded from there)
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now viktor-syncd
+#
+# Logs: journalctl --user -u viktor-syncd -f
+
+[Unit]
+Description=viktor syncd — periodic delta syncs of semantic memory and lexical history
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=%h/.local/bin/viktor syncd -interval 15m -full-interval 24h
+WorkingDirectory=%h/projects/my-mcp/viktor
+Restart=on-failure
+RestartSec=30
+# SIGTERM → graceful shutdown (the daemon finishes the current tick)
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target
