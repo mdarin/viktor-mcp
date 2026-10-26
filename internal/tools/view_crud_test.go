@@ -111,3 +111,25 @@ func TestKanbanSortBucket(t *testing.T) {
 		t.Fatal("missing sort_by must be rejected")
 	}
 }
+
+func TestKanbanTasksByBucketFilter(t *testing.T) {
+	f, session := viewSession(t)
+	f.viewTasks = []any{
+		map[string]any{"id": float64(41), "title": "To-Do", "position": float64(1000), "tasks": []any{map[string]any{"id": float64(301), "title": "t1"}}},
+		map[string]any{"id": float64(42), "title": "Done", "position": float64(2000), "tasks": []any{}},
+	}
+	out, err := callCRUD(t, session, "kanban_tasks_by_bucket", map[string]any{"project_id": 8, "view_id": 40, "bucket": "to-do"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	by := out["by_bucket"].(map[string]any)
+	if len(by) != 1 {
+		t.Fatalf("by_bucket = %v, want single bucket", by)
+	}
+	if _, ok := by["To-Do"]; !ok {
+		t.Fatalf("by_bucket = %v, want To-Do", by)
+	}
+	if _, err := callCRUD(t, session, "kanban_tasks_by_bucket", map[string]any{"project_id": 8, "view_id": 40, "bucket": "nope"}); err == nil {
+		t.Fatal("unknown bucket must be an error, not a silent full-board dump")
+	}
+}

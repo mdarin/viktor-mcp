@@ -94,9 +94,19 @@ func (r *Registry) stalledTaskIDs(ctx context.Context, instance string) map[int]
 	return out
 }
 
-func fetchOpenTasks(ctx context.Context, r *Registry) ([]map[string]any, error) {
+// fetchOpenTasks returns open tasks either for one project (projectID > 0)
+// or across the whole instance. The project filter was silently dropped
+// before card #887 — the parameter must reach the API.
+func fetchOpenTasks(ctx context.Context, r *Registry, projectID int) ([]map[string]any, error) {
 	var tasks []map[string]any
-	if err := r.api().ListTasks(ctx, client.ListParams{Filter: "done = false"}, &tasks); err != nil {
+	p := client.ListParams{Filter: "done = false"}
+	var err error
+	if projectID > 0 {
+		err = r.api().ProjectTasks(ctx, projectID, p, &tasks)
+	} else {
+		err = r.api().ListTasks(ctx, p, &tasks)
+	}
+	if err != nil {
 		return nil, err
 	}
 	if tasks == nil {
@@ -108,6 +118,7 @@ func fetchOpenTasks(ctx context.Context, r *Registry) ([]map[string]any, error) 
 type TodayActionsIn struct {
 	Limit        int    `json:"limit,omitempty"`
 	IntentFilter string `json:"intent_filter,omitempty"`
+	ProjectID    int    `json:"project_id,omitempty"`
 }
 
 func handleTodayActions(r *Registry) mcp.ToolHandlerFor[TodayActionsIn, any] {
@@ -119,7 +130,7 @@ func handleTodayActions(r *Registry) mcp.ToolHandlerFor[TodayActionsIn, any] {
 		if limit > 50 {
 			limit = 50
 		}
-		tasks, err := fetchOpenTasks(ctx, r)
+		tasks, err := fetchOpenTasks(ctx, r, in.ProjectID)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -263,6 +274,7 @@ type TodayGetWeightsIn struct{}
 
 type TodayReckoningIn struct {
 	Threshold int `json:"threshold,omitempty"`
+	ProjectID int `json:"project_id,omitempty"`
 }
 
 func handleTodayReckoning(r *Registry) mcp.ToolHandlerFor[TodayReckoningIn, any] {
@@ -271,7 +283,7 @@ func handleTodayReckoning(r *Registry) mcp.ToolHandlerFor[TodayReckoningIn, any]
 		if threshold <= 0 {
 			threshold = 3
 		}
-		tasks, err := fetchOpenTasks(ctx, r)
+		tasks, err := fetchOpenTasks(ctx, r, in.ProjectID)
 		if err != nil {
 			return nil, nil, err
 		}

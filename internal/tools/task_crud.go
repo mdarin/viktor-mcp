@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -73,6 +74,22 @@ func handleTaskCreate(r *Registry) mcp.ToolHandlerFor[TaskCreateIn, any] {
 		var created map[string]any
 		if err := r.api().CreateTask(ctx, in.ProjectID, body, &created); err != nil {
 			return nil, nil, err
+		}
+		if len(in.Labels) > 0 {
+			labelIDs, err := resolveLabels(ctx, r, in.Labels, false)
+			if err != nil {
+				return nil, nil, err
+			}
+			taskID := asInt(created["id"])
+			for _, l := range in.Labels {
+				if err := attachLabelIfMissing(ctx, r, taskID, labelIDs[strings.ToLower(l)], l); err != nil {
+					return nil, nil, err
+				}
+			}
+			var refreshed map[string]any
+			if err := r.api().GetTask(ctx, taskID, &refreshed); err == nil {
+				created = refreshed
+			}
 		}
 		return nil, trimTask(created), nil
 	}

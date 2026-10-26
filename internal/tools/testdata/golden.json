@@ -1115,6 +1115,9 @@
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
+        "bucket": {
+          "type": "string"
+        },
         "project_id": {
           "type": "integer"
         },
@@ -1801,6 +1804,15 @@
         "hex_color": {
           "type": "string"
         },
+        "labels": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
         "priority": {
           "type": "integer"
         },
@@ -2257,6 +2269,9 @@
         },
         "limit": {
           "type": "integer"
+        },
+        "project_id": {
+          "type": "integer"
         }
       },
       "type": "object"
@@ -2276,6 +2291,9 @@
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
+        "project_id": {
+          "type": "integer"
+        },
         "threshold": {
           "type": "integer"
         }

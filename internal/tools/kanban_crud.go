@@ -186,9 +186,26 @@ func handleKanbanTasksByBucket(r *Registry) mcp.ToolHandlerFor[KanbanTasksByBuck
 		}
 		board := data.(map[string]any)
 		grouped := map[string]any{}
+		var single any
+		singleTitle := ""
 		for _, b := range board["buckets"].([]map[string]any) {
 			title := fmt.Sprint(b["title"])
 			grouped[title] = b["tasks"]
+			if in.Bucket != "" && strings.EqualFold(title, in.Bucket) {
+				single = b["tasks"]
+				singleTitle = title
+			}
+		}
+		if in.Bucket != "" && single == nil {
+			names := make([]string, 0, len(grouped))
+			for title := range grouped {
+				names = append(names, title)
+			}
+			sort.Strings(names)
+			return nil, nil, fmt.Errorf("bucket %q not found in project %d; available: %s", in.Bucket, in.ProjectID, strings.Join(names, ", "))
+		}
+		if single != nil {
+			grouped = map[string]any{singleTitle: single}
 		}
 		return nil, map[string]any{
 			"project_id": in.ProjectID,

@@ -288,9 +288,11 @@ func (f *fakeCRUD) handler(w http.ResponseWriter, r *http.Request) {
 			json.NewEncoder(w).Encode([]map[string]any{})
 			return
 		}
+		var pid int
+		fmt.Sscanf(path, "/api/v2/projects/%d/tasks", &pid)
 		out := []map[string]any{}
 		for _, t := range f.filteredTasks(filter) {
-			if pid, _ := t["project_id"].(float64); int(pid) == 8 {
+			if tp, _ := t["project_id"].(float64); int(tp) == pid {
 				out = append(out, t)
 			}
 		}
@@ -842,5 +844,20 @@ func TestTaskUpdateHexColor(t *testing.T) {
 		"task_id": 301, "hex_color": "red",
 	}); err == nil {
 		t.Fatal("invalid hex_color must be rejected")
+	}
+}
+
+func TestTaskCreateLabels(t *testing.T) {
+	_, session := newCRUDFixture(t)
+	out, err := callCRUD(t, session, "task_create", map[string]any{"project_id": 8, "title": "with label", "labels": []string{"QA"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	labels, _ := out["labels"].([]any)
+	if len(labels) != 1 || labels[0].(map[string]any)["title"] != "qa" {
+		t.Fatalf("labels = %v, want attached qa", labels)
+	}
+	if _, err := callCRUD(t, session, "task_create", map[string]any{"project_id": 8, "title": "bad", "labels": []string{"nope"}}); err == nil {
+		t.Fatal("unknown label must be an error, not a silent drop")
 	}
 }

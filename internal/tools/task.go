@@ -30,6 +30,10 @@ type TaskCreateIn struct {
 	HexColor    string    `json:"hex_color,omitempty"`
 	RepeatAfter int       `json:"repeat_after,omitempty"`
 	RepeatMode  int       `json:"repeat_mode,omitempty"`
+	// Labels attaches existing labels by title (case-insensitive) right
+	// after creation; an unknown label is an error, never a silent drop
+	// (card #888).
+	Labels []string `json:"labels,omitempty"`
 }
 
 type TaskDeleteIn struct {

@@ -42,6 +42,10 @@ type KanbanSortBucketIn struct {
 type KanbanTasksByBucketIn struct {
 	ProjectID int `json:"project_id"`
 	ViewID    int `json:"view_id"`
+	// Bucket narrows the response to a single bucket by title
+	// (case-insensitive); an unknown name is an error, never a silent
+	// full-board dump (card #889).
+	Bucket string `json:"bucket,omitempty"`
 }
 
 func registerKanban(r *Registry) {

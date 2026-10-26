@@ -235,3 +235,42 @@ func TestTodayWeights(t *testing.T) {
 		t.Fatal("negative weight must be rejected")
 	}
 }
+
+func TestTodayActionsProjectFilter(t *testing.T) {
+	_, session := newCRUDFixture(t)
+	out, err := callCRUD(t, session, "today_actions", map[string]any{"project_id": 9, "limit": 50})
+	if err != nil {
+		t.Fatal(err)
+	}
+	total := 0
+	for _, i := range out["intents"].([]any) {
+		for _, it := range i.(map[string]any)["items"].([]any) {
+			total++
+			if it.(map[string]any)["task_id"] != float64(303) {
+				t.Fatalf("task from another project leaked in: %v", it)
+			}
+		}
+	}
+	if total != 1 {
+		t.Fatalf("total = %d, want 1 (task 303 only)", total)
+	}
+}
+
+func TestTodayReckoningProjectFilter(t *testing.T) {
+	f, session := newCRUDFixture(t)
+	f.tasks[303]["description"] = "<!-- viktor:deferred=3 dread=0 -->"
+	out, err := callCRUD(t, session, "today_reckoning", map[string]any{"project_id": 9})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out["count"] != float64(1) {
+		t.Fatalf("reckoning for project 9 = %v", out)
+	}
+	out, err = callCRUD(t, session, "today_reckoning", map[string]any{"project_id": 8})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out["count"] != float64(0) {
+		t.Fatalf("reckoning for project 8 = %v", out)
+	}
+}
