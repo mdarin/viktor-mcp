@@ -237,6 +237,19 @@ viktor syncd -once -full            # то же с полным перескан
 На unix пути прежние: конфиг `~/.config/viktor/`, состояние
 `~/.local/state/viktor/` (XDG-переменные приоритетны).
 
+> **TODO (проверка на реальной Windows-машине, card #939):** CI
+> windows-latest гоняет полный тест-сьют, но live-смоук не выполнялся.
+> Чек-лист при первом запуске на Windows:
+> 1. `go build -o viktor.exe ./cmd/viktor` (или release `viktor-windows-*.exe`),
+>    `viktor.exe version` → 0.9.2+;
+> 2. `viktor.exe syncd -once` — оба индекса отчитались `ok=true`;
+> 3. MCP stdio-сессия из Claude/Codex: `task_create` → `task_get`
+>    (bucket_id обогащён) → `kanban_get`;
+> 4. `deploy\windows\install-syncd.ps1` — таск зарегистрирован,
+>    `%USERPROFILE%\viktor-syncd.log` растёт, лок
+>    `%LocalAppData%\viktor\state\syncd\default.lock` удерживается;
+> 5. `memory_status` → `full_sync_stale=false` после полного тика.
+
 
 #### Секция repowise (опциональна)
 
