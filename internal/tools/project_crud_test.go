@@ -171,3 +171,38 @@ func TestProjectSetupPrune(t *testing.T) {
 		t.Fatalf("prune must be off by default, buckets_deleted = %v", out3)
 	}
 }
+
+func TestProjectExport(t *testing.T) {
+	f, session := newCRUDFixture(t)
+	proj, err := callCRUD(t, session, "project_create", map[string]any{"title": "export-me"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid := proj["id"].(float64)
+	f.tasks[301]["project_id"] = pid
+	f.tasks[302]["project_id"] = pid
+	f.comments[301] = []string{"export comment"}
+	// Single project: tasks + views + buckets + comments (card #896).
+	out, err := callCRUD(t, session, "project_export", map[string]any{"project_id": int(pid)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out["task_count"] == nil || out["views"] == nil || out["buckets"] == nil {
+		t.Fatalf("single export missing sections: %v", out)
+	}
+	tasks := out["tasks"].([]any)
+	if len(tasks) == 0 {
+		t.Fatalf("no tasks exported: %v", out)
+	}
+	if _, ok := out["comments"].(map[string]any); !ok {
+		t.Fatalf("comments section must exist: %v", out)
+	}
+	// All-projects mode: tasks only.
+	out2, err := callCRUD(t, session, "project_export", map[string]any{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out2["count"] == nil || out2["projects"] == nil {
+		t.Fatalf("all-projects export = %v", out2)
+	}
+}

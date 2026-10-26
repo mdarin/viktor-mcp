@@ -205,6 +205,108 @@ func handleProjectCreateFromTemplate(r *Registry) mcp.ToolHandlerFor[ProjectCrea
 	}
 }
 
+type ProjectExportIn struct {
+	// ProjectID exports one project with views, buckets and comments.
+	// Zero exports a lightweight backup of every project (tasks only).
+	ProjectID int `json:"project_id,omitempty"`
+	// IncludeComments (default true for a single-project export)
+	// attaches each task's comments.
+	IncludeComments *bool `json:"include_comments,omitempty"`
+}
+
+// handleProjectExport implements the basic export (card #896, replacing
+// the stub): one project → project + tasks (trimmed) + views + buckets +
+// comments; all projects → tasks only. The shape is JSON-serializable
+// end to end for backup/transfer.
+func handleProjectExport(r *Registry) mcp.ToolHandlerFor[ProjectExportIn, any] {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, in ProjectExportIn) (*mcp.CallToolResult, any, error) {
+		includeComments := true
+		if in.IncludeComments != nil {
+			includeComments = *in.IncludeComments
+		}
+		if in.ProjectID > 0 {
+			out, err := exportOneProject(ctx, r, in.ProjectID, includeComments)
+			if err != nil {
+				return nil, nil, err
+			}
+			return nil, out, nil
+		}
+		var projects []map[string]any
+		if err := r.api().ListProjects(ctx, client.ListParams{}, &projects); err != nil {
+			return nil, nil, err
+		}
+		exports := []map[string]any{}
+		for _, p := range projects {
+			id := asInt(p["id"])
+			var tasks []map[string]any
+			if err := r.api().ProjectTasks(ctx, id, client.ListParams{}, &tasks); err != nil {
+				return nil, nil, fmt.Errorf("project %d tasks: %w", id, err)
+			}
+			trimmed := make([]map[string]any, 0, len(tasks))
+			for _, t := range tasks {
+				trimmed = append(trimmed, trimTask(t))
+			}
+			exports = append(exports, map[string]any{
+				"project":     trimProject(p),
+				"tasks":       trimmed,
+				"task_count":  len(trimmed),
+			})
+		}
+		return nil, map[string]any{
+			"exported_at": time.Now().UTC().Format(time.RFC3339),
+			"projects":    exports,
+			"count":       len(exports),
+		}, nil
+	}
+}
+
+func exportOneProject(ctx context.Context, r *Registry, projectID int, includeComments bool) (map[string]any, error) {
+	var proj map[string]any
+	if err := r.api().GetProject(ctx, projectID, &proj); err != nil {
+		return nil, err
+	}
+	var tasks []map[string]any
+	if err := r.api().ProjectTasks(ctx, projectID, client.ListParams{}, &tasks); err != nil {
+		return nil, fmt.Errorf("tasks: %w", err)
+	}
+	trimmed := make([]map[string]any, 0, len(tasks))
+	comments := map[string]any{}
+	for _, t := range tasks {
+		trimmed = append(trimmed, trimTask(t))
+		if !includeComments {
+			continue
+		}
+		var cs []map[string]any
+		if err := r.api().TaskComments(ctx, asInt(t["id"]), &cs); err != nil {
+			return nil, fmt.Errorf("comments of task %d: %w", asInt(t["id"]), err)
+		}
+		if len(cs) > 0 {
+			comments[fmt.Sprint(asInt(t["id"]))] = cs
+		}
+	}
+	var views []map[string]any
+	if err := r.api().ListViews(ctx, projectID, &views); err != nil {
+		return nil, fmt.Errorf("views: %w", err)
+	}
+	bucketsByView := map[string]any{}
+	for _, v := range views {
+		var buckets []map[string]any
+		if err := r.api().ListBuckets(ctx, projectID, asInt(v["id"]), &buckets); err != nil {
+			return nil, fmt.Errorf("buckets of view %d: %w", asInt(v["id"]), err)
+		}
+		bucketsByView[fmt.Sprint(asInt(v["id"]))] = buckets
+	}
+	return map[string]any{
+		"exported_at": time.Now().UTC().Format(time.RFC3339),
+		"project":     trimProject(proj),
+		"tasks":       trimmed,
+		"task_count":  len(trimmed),
+		"views":       views,
+		"buckets":     bucketsByView,
+		"comments":    comments,
+	}, nil
+}
+
 func handleProjectAnalyze(r *Registry) mcp.ToolHandlerFor[ProjectAnalyzeIn, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in ProjectAnalyzeIn) (*mcp.CallToolResult, any, error) {
 		if in.ProjectID == 0 {

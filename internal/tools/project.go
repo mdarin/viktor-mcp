@@ -52,8 +52,6 @@ type ProjectCreateFromTemplateIn struct {
 	Mode  string `json:"mode,omitempty"`
 }
 
-type ProjectExportIn struct{}
-
 type ProjectImportIn struct {
 	ExportJSON   string `json:"export_json"`
 	SkipExisting bool   `json:"skip_existing,omitempty"`
@@ -71,6 +69,6 @@ func registerProject(r *Registry) {
 	add[ProjectSetupIn](r, "project_setup", "Set up a project with buckets, labels, and tasks in one call", handleProjectSetup(r))
 	add[ProjectAnalyzeIn](r, "project_analyze", "Analyze project data to discover meaningful grouping dimensions", handleProjectAnalyze(r))
 	add[ProjectCreateFromTemplateIn](r, "project_create_from_template", "Create a project from a template with exactly the requested kanban columns", handleProjectCreateFromTemplate(r))
-	add[ProjectExportIn](r, "project_export", "Export all projects and tasks for backup")
+	add[ProjectExportIn](r, "project_export", "Export a project (project + tasks + views + buckets + comments) or all projects (tasks only) as JSON for backup", handleProjectExport(r))
 	add[ProjectImportIn](r, "project_import", "Import projects from an export file")
 }

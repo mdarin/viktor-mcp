@@ -1295,9 +1295,20 @@
     "name": "project_delete"
   },
   {
-    "description": "Export all projects and tasks for backup",
+    "description": "Export a project (project + tasks + views + buckets + comments) or all projects (tasks only) as JSON for backup",
     "inputSchema": {
       "additionalProperties": false,
+      "properties": {
+        "include_comments": {
+          "type": [
+            "null",
+            "boolean"
+          ]
+        },
+        "project_id": {
+          "type": "integer"
+        }
+      },
       "type": "object"
     },
     "name": "project_export"

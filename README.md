@@ -414,7 +414,7 @@ go test ./internal/tools -update-snapshot
 | `project_create` | Create a project |
 | `project_create_from_template` | Create a project from a template with exactly the requested kanban columns |
 | `project_delete` | Delete a project and all its tasks permanently |
-| `project_export` | Export all projects and tasks for backup |
+| `project_export` | Export a project (project + tasks + views + buckets + comments) or all projects (tasks only) as JSON for backup |
 | `project_get` | Get project details |
 | `project_import` | Import projects from an export file |
 | `project_list` | List projects on the current instance |
