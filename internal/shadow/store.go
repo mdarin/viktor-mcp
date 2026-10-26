@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"viktor/internal/platform"
 	"time"
 )
 
@@ -39,18 +41,14 @@ type Store struct {
 	nextShadow int64
 }
 
-// DefaultRoot returns the default shadow root directory
-// (~/.local/state/viktor/shadow, honouring XDG_STATE_HOME).
+// DefaultRoot returns the default shadow root directory (platform state
+// dir + /shadow, see internal/platform).
 func DefaultRoot() string {
-	base := os.Getenv("XDG_STATE_HOME")
-	if base == "" {
-		home, err := os.UserHomeDir()
-		if err != nil || home == "" {
-			return filepath.Join(os.TempDir(), "viktor-shadow")
-		}
-		base = filepath.Join(home, ".local", "state")
+	base, err := platform.StateDir()
+	if err != nil {
+		return filepath.Join(os.TempDir(), "viktor-shadow")
 	}
-	return filepath.Join(base, "viktor", "shadow")
+	return filepath.Join(base, "shadow")
 }
 
 // NewStore opens (and creates) the shadow store for an instance.

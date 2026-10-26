@@ -206,11 +206,36 @@ viktor syncd -once -full            # то же с полным перескан
 - macOS: `deploy/launchd/com.viktor.syncd.plist` (LaunchAgent,
   `KeepAlive` + перезапуск при падении);
 - Linux: `deploy/systemd/viktor-syncd.service` (user-unit,
-  `Restart=on-failure`).
+  `Restart=on-failure`);
+- Windows: `deploy/windows/install-syncd.ps1` (Task Scheduler,
+  запуск при логоне, автоперезапуск, лог в
+  `%USERPROFILE%\viktor-syncd.log`):
+
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File deploy\windows\install-syncd.ps1 `
+    -BinaryPath "$env:USERPROFILE\.local\bin\viktor.exe" `
+    -WorkingDirectory "C:\path\to\viktor\repo"
+  ```
 
 Оба запускают `viktor syncd` из рабочего каталога, где лежит `.env`
 с секциями `memory` и `history`; пути к бинарнику и каталогу поправьте
 под себя (метки `CHANGE_ME` в plist).
+
+#### Windows (card #939)
+
+Бинарник кросс-платформенный; установка:
+
+1. `go install github.com/mdarin/viktor-mcp/cmd/viktor@latest` — или
+   скачать готовый `viktor-windows-*.exe` из GitHub releases и положить
+   в каталог из `PATH`.
+2. Конфиг: `%AppData%\viktor\config.json` (инстанс, токены), `.env`
+   с секциями `memory`/`history` — в рабочий каталог, как на unix.
+3. Состояние (FSM, курсоры синхов, shadow-очередь):
+   `%LocalAppData%\viktor\state\...`.
+4. Автозапуск syncd — скрипт из предыдущего раздела (Task Scheduler).
+
+На unix пути прежние: конфиг `~/.config/viktor/`, состояние
+`~/.local/state/viktor/` (XDG-переменные приоритетны).
 
 
 #### Секция repowise (опциональна)

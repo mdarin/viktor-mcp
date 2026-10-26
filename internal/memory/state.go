@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+
+	"viktor/internal/platform"
 )
 
 // syncState is the local index state for one instance: the newest task
@@ -56,19 +58,14 @@ func (s *syncState) save(path string) error {
 	return os.Rename(tmp, path)
 }
 
-// DefaultStateRoot returns the memory state root
-// (~/.local/state/viktor, honouring XDG_STATE_HOME) — the same base the
-// shadow queue uses.
+// DefaultStateRoot returns the memory state root (platform state dir,
+// see internal/platform) — the same base the shadow queue uses.
 func DefaultStateRoot() string {
-	base := os.Getenv("XDG_STATE_HOME")
-	if base == "" {
-		home, err := os.UserHomeDir()
-		if err != nil || home == "" {
-			return filepath.Join(os.TempDir(), "viktor-memory")
-		}
-		base = filepath.Join(home, ".local", "state")
+	base, err := platform.StateDir()
+	if err != nil {
+		return filepath.Join(os.TempDir(), "viktor-memory")
 	}
-	return filepath.Join(base, "viktor")
+	return base
 }
 
 // DefaultStatePath returns the sync state file path for an instance.

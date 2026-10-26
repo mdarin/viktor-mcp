@@ -13,6 +13,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"viktor/internal/fsmstate"
+	"viktor/internal/platform"
 )
 
 // gitHead resolves HEAD of the repo backing a submit_for_review; an empty
@@ -27,20 +28,16 @@ func gitHead(ctx context.Context, repo string) (string, error) {
 }
 
 // DefaultFSMPath returns the SQLite path of the FSM store for an instance
-// (<XDG_STATE_HOME>/viktor/fsm/<instance>.db, ADR 0004).
+// (platform state dir, see internal/platform; ADR 0004).
 func DefaultFSMPath(instance string) string {
 	if instance == "" {
 		instance = "default"
 	}
-	base := os.Getenv("XDG_STATE_HOME")
-	if base == "" {
-		home, err := os.UserHomeDir()
-		if err != nil || home == "" {
-			return filepath.Join(os.TempDir(), "viktor-fsm", instance+".db")
-		}
-		base = filepath.Join(home, ".local", "state")
+	base, err := platform.StateDir()
+	if err != nil {
+		return filepath.Join(os.TempDir(), "viktor-fsm", instance+".db")
 	}
-	return filepath.Join(base, "viktor", "fsm", instance+".db")
+	return filepath.Join(base, "fsm", instance+".db")
 }
 
 var (

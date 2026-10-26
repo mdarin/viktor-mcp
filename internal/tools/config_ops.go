@@ -11,6 +11,8 @@ import (
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"viktor/internal/platform"
 )
 
 type settingsFile map[string]string
@@ -19,11 +21,11 @@ func settingsPath() (string, error) {
 	if p := os.Getenv("VIKTOR_SETTINGS"); p != "" {
 		return p, nil
 	}
-	home, err := os.UserHomeDir()
+	dir, err := platform.ConfigDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".config", "viktor", "settings.json"), nil
+	return filepath.Join(dir, "settings.json"), nil
 }
 
 func loadSettings() (settingsFile, error) {

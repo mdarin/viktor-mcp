@@ -32,3 +32,24 @@ jobs:
 
       - name: Build
         run: go build -trimpath -ldflags "-s -w" -o bin/viktor ./cmd/viktor
+
+  # Windows parity (card #939): build, vet and full unit tests on
+  # windows-latest so platform-specific paths and locks don't rot.
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: true
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test -count=1 ./...
+
+      - name: Build
+        run: go build -trimpath -ldflags "-s -w" -o viktor.exe ./cmd/viktor

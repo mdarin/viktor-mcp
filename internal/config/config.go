@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"viktor/internal/platform"
 )
 
 const defaultInstanceEnvPrefix = "VIKUNJA_"
@@ -288,11 +290,11 @@ func DefaultPath() string {
 	if p := os.Getenv("VIKUNJA_CONFIG"); p != "" {
 		return p
 	}
-	home, err := os.UserHomeDir()
+	dir, err := platform.ConfigDir()
 	if err != nil {
 		return "viktor.json"
 	}
-	return filepath.Join(home, ".config", "viktor", "config.json")
+	return filepath.Join(dir, "config.json")
 }
 
 func Load() (*Config, error) {

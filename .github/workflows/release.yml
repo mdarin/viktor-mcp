@@ -11,8 +11,11 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [linux, darwin]
+        os: [linux, darwin, windows]
         arch: [amd64, arm64]
+        exclude:
+          # 32-bit-style oddity kept out; windows/arm64 is fine.
+          # No excludes needed today.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,7 +29,10 @@ jobs:
         run: go test -count=1 ./...
 
       - name: Build
-        run: go build -trimpath -ldflags "-s -w" -o viktor-${{ matrix.os }}-${{ matrix.arch }} ./cmd/viktor
+        run: |
+          NAME="viktor-${{ matrix.os }}-${{ matrix.arch }}"
+          if [ "${{ matrix.os }}" = "windows" ]; then NAME="$NAME.exe"; fi
+          go build -trimpath -ldflags "-s -w" -o "$NAME" ./cmd/viktor
         env:
           GOOS: ${{ matrix.os }}
           GOARCH: ${{ matrix.arch }}
@@ -34,4 +40,4 @@ jobs:
 
       - uses: softprops/action-gh-release@v2
         with:
-          files: viktor-${{ matrix.os }}-${{ matrix.arch }}
+          files: viktor-*
