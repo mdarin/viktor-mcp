@@ -24,6 +24,40 @@ func trimTask(m map[string]any) map[string]any {
 	return out
 }
 
+// enrichTaskBucket fills in the real kanban position when the task
+// endpoint reports bucket_id 0 (Vikunja does not mirror the position in
+// /tasks/{id}), so position checks don't require a kanban_get (card #895).
+// Best-effort: any lookup failure leaves the response untouched.
+func enrichTaskBucket(ctx context.Context, r *Registry, task map[string]any) {
+	if asInt(task["bucket_id"]) != 0 {
+		return
+	}
+	projectID := asInt(task["project_id"])
+	if projectID == 0 {
+		return
+	}
+	viewID, err := findKanbanViewID(ctx, r, projectID)
+	if err != nil {
+		return
+	}
+	var board []map[string]any
+	if err := r.api().ViewTasks(ctx, projectID, viewID, &board); err != nil {
+		return
+	}
+	for _, b := range board {
+		ts, _ := b["tasks"].([]any)
+		for _, t := range ts {
+			if tm, ok := t.(map[string]any); ok && asInt(tm["id"]) == asInt(task["id"]) {
+				task["bucket_id"] = asInt(b["id"])
+				if title, _ := b["title"].(string); title != "" {
+					task["bucket_title"] = title
+				}
+				return
+			}
+		}
+	}
+}
+
 func handleTaskGet(r *Registry) mcp.ToolHandlerFor[TaskGetIn, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in TaskGetIn) (*mcp.CallToolResult, any, error) {
 		var task map[string]any
@@ -36,6 +70,7 @@ func handleTaskGet(r *Registry) mcp.ToolHandlerFor[TaskGetIn, any] {
 				task["related_tasks"] = rt
 			}
 		}
+		enrichTaskBucket(ctx, r, task)
 		return nil, task, nil
 	}
 }

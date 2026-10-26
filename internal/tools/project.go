@@ -36,6 +36,11 @@ type ProjectShareIn struct {
 type ProjectSetupIn struct {
 	ProjectID int      `json:"project_id"`
 	Buckets   []string `json:"buckets,omitempty"`
+	// Prune deletes existing buckets that are not in the requested
+	// profile. Off by default: pruning is destructive on a project with
+	// hand-made columns (card #891). Empty extra buckets are still
+	// removable; non-empty ones are never deleted.
+	Prune bool `json:"prune,omitempty"`
 }
 
 type ProjectAnalyzeIn struct {

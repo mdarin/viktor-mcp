@@ -1374,6 +1374,9 @@
         },
         "project_id": {
           "type": "integer"
+        },
+        "prune": {
+          "type": "boolean"
         }
       },
       "required": [

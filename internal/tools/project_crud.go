@@ -158,7 +158,7 @@ func handleProjectSetup(r *Registry) mcp.ToolHandlerFor[ProjectSetupIn, any] {
 		if len(columns) == 0 {
 			columns = []string{"todo", "in-progress", "done"}
 		}
-		out, err := setupKanbanCore(ctx, r, in.ProjectID, "Kanban", columns, true)
+		out, err := setupKanbanCore(ctx, r, in.ProjectID, "Kanban", columns, in.Prune)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -237,7 +237,10 @@ func handleProjectAnalyze(r *Registry) mcp.ToolHandlerFor[ProjectAnalyzeIn, any]
 					byLabel[lt]++
 				}
 			}
-			if dd, ok := t["due_date"].(string); ok && dd != "" && dd < todayUTC() {
+			// Zero dates ("0001-01-01") mean "no due date" in Vikunja;
+			// counting them as overdue desynchronized this tool from
+			// server-side task_query overdue (card #890).
+			if dd, ok := t["due_date"].(string); ok && dd != "" && dd != zeroDate && dd < todayUTC() {
 				if d, _ := t["done"].(bool); !d {
 					overdue++
 				}
@@ -343,20 +346,40 @@ func setupKanbanCore(ctx context.Context, r *Registry, projectID int, viewTitle 
 		final = append(final, map[string]any{"id": float64(id), "title": title})
 	}
 	deletedCount := 0
+	var keptNonEmpty []string
 	if deleteDefault {
 		kept := map[string]bool{}
 		for _, b := range final {
 			kept[b["title"].(string)] = true
 		}
-		for _, b := range buckets {
-			title, _ := b["title"].(string)
-			if !kept[title] {
-				if err := r.api().DeleteBucket(ctx, projectID, viewID, asInt(b["id"])); err != nil {
-					return nil, fmt.Errorf("delete bucket %q: %w", title, err)
+		// Never delete a bucket that still holds tasks: a silent delete
+		// of a populated column loses work (card #891).
+		nonEmpty := map[int]bool{}
+		var board []map[string]any
+		if err := r.api().ViewTasks(ctx, projectID, viewID, &board); err == nil {
+			for _, b := range board {
+				if ts, _ := b["tasks"].([]any); len(ts) > 0 {
+					nonEmpty[asInt(b["id"])] = true
 				}
-				deletedCount++
 			}
 		}
+		for _, b := range buckets {
+			title, _ := b["title"].(string)
+			if kept[title] {
+				continue
+			}
+			if nonEmpty[asInt(b["id"])] {
+				keptNonEmpty = append(keptNonEmpty, title)
+				continue
+			}
+			if err := r.api().DeleteBucket(ctx, projectID, viewID, asInt(b["id"])); err != nil {
+				return nil, fmt.Errorf("delete bucket %q: %w", title, err)
+			}
+			deletedCount++
+		}
+	}
+	if keptNonEmpty == nil {
+		keptNonEmpty = []string{}
 	}
 	doneBucketID := 0
 	for _, b := range final {
@@ -381,6 +404,7 @@ func setupKanbanCore(ctx context.Context, r *Registry, projectID int, viewTitle 
 		"buckets":         final,
 		"buckets_created": createdCount,
 		"buckets_deleted": deletedCount,
+		"buckets_kept_non_empty": keptNonEmpty,
 		"done_bucket_id":  doneBucketID,
 	}, nil
 }

@@ -861,3 +861,17 @@ func TestTaskCreateLabels(t *testing.T) {
 		t.Fatal("unknown label must be an error, not a silent drop")
 	}
 }
+
+func TestTaskGetEnrichesBucket(t *testing.T) {
+	f, session := newCRUDFixture(t)
+	f.viewTasks = []any{
+		map[string]any{"id": float64(301), "title": "t1", "bucket_id": float64(42)},
+	}
+	out, err := callCRUD(t, session, "task_get", map[string]any{"task_id": 301})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out["bucket_id"] != float64(42) || out["bucket_title"] != "Done" {
+		t.Fatalf("bucket enrichment failed: bucket_id=%v bucket_title=%v", out["bucket_id"], out["bucket_title"])
+	}
+}

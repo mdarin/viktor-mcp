@@ -119,3 +119,55 @@ func TestProjectListAll(t *testing.T) {
 		t.Fatalf("instance row = %v", first)
 	}
 }
+
+func TestProjectAnalyzeZeroDateNotOverdue(t *testing.T) {
+	f, session := newCRUDFixture(t)
+	f.tasks[304] = map[string]any{"id": float64(304), "title": "no due", "done": false, "priority": float64(0), "project_id": float64(8), "due_date": "0001-01-01T00:00:00Z", "labels": []any{}}
+	out, err := callCRUD(t, session, "project_analyze", map[string]any{"project_id": 8})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 301 has a real past due date (2026-01-01) and stays overdue;
+	// the zero date of 304 must not count (card #890).
+	if out["overdue"] != float64(1) {
+		t.Fatalf("overdue = %v, want 1 (zero dates are not overdue)", out["overdue"])
+	}
+}
+
+func TestProjectSetupPrune(t *testing.T) {
+	f, session := newCRUDFixture(t)
+	// Fixture semantic: viewTasks is a flat task list (client fallback
+	// reassembly); task 301 sits in bucket 41 "To-Do".
+	f.viewTasks = []any{
+		map[string]any{"id": float64(301), "title": "t1", "bucket_id": float64(41)},
+	}
+	// A populated bucket outside the profile is never deleted (card #891).
+	out, err := callCRUD(t, session, "project_setup", map[string]any{"project_id": 8, "buckets": []string{"done"}, "prune": true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out["buckets_deleted"] != float64(0) {
+		t.Fatalf("buckets_deleted = %v, want 0 for a non-empty bucket", out["buckets_deleted"])
+	}
+	kept := out["buckets_kept_non_empty"].([]any)
+	if len(kept) != 1 || kept[0] != "To-Do" {
+		t.Fatalf("buckets_kept_non_empty = %v", kept)
+	}
+	// Empty extra buckets are pruned.
+	_, session2 := newCRUDFixture(t)
+	out2, err := callCRUD(t, session2, "project_setup", map[string]any{"project_id": 8, "buckets": []string{"done"}, "prune": true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out2["buckets_deleted"] != float64(1) {
+		t.Fatalf("buckets_deleted = %v, want 1 for an empty extra bucket", out2)
+	}
+	// Prune is off by default.
+	out3, err := callCRUD(t, session2, "project_setup", map[string]any{"project_id": 8, "buckets": []string{"done"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out3["buckets_deleted"] != float64(0) {
+		t.Fatalf("prune must be off by default, buckets_deleted = %v", out3)
+	}
+}
