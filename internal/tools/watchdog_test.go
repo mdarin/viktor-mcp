@@ -75,6 +75,8 @@ func TestWatchdogResumeAuditsActor(t *testing.T) {
 // a "stalled" penalty term (card #58).
 func TestTodayActionsMarksStalled(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	CloseFSMStores()
+	t.Cleanup(CloseFSMStores) // release SQLite handles before TempDir RemoveAll (Windows)
 	f, session := newCRUDFixture(t)
 	if _, err := callCRUD(t, session, "claim_task", map[string]any{"task_id": 303, "request_id": "req-watch-3"}); err != nil {
 		t.Fatal(err)
