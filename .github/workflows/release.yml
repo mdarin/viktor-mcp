@@ -13,9 +13,6 @@ jobs:
       matrix:
         os: [linux, darwin, windows]
         arch: [amd64, arm64]
-        exclude:
-          # 32-bit-style oddity kept out; windows/arm64 is fine.
-          # No excludes needed today.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
