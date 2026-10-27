@@ -552,6 +552,11 @@ func (f *fakeCRUD) handler(w http.ResponseWriter, r *http.Request) {
 
 func newCRUDFixture(t *testing.T) (*fakeCRUD, *mcp.ClientSession) {
 	t.Helper()
+	// Tests relocate state via XDG_STATE_HOME; close any FSM stores
+	// opened before this test and after it, so TempDir RemoveAll never
+	// hits an open SQLite handle (Windows unlinkat semantics).
+	CloseFSMStores()
+	t.Cleanup(CloseFSMStores)
 	f := &fakeCRUD{nextID: 300, nextProjID: 900, projects: map[int]map[string]any{}, labels: map[int]map[string]any{1: {"id": float64(1), "title": "qa"}}, nextLabel: 1, comments: map[int][]string{}, teamShares: map[int]map[int]float64{}, tasks: map[int]map[string]any{
 		301: {"id": float64(301), "title": "a", "done": false, "priority": float64(5), "project_id": float64(8), "due_date": "2026-01-01T00:00:00Z", "labels": []any{}, "assignees": []any{}, "reminders": []any{}},
 		302: {"id": float64(302), "title": "b", "done": true, "priority": float64(0), "project_id": float64(8), "labels": []any{}, "assignees": []any{}, "reminders": []any{}},
