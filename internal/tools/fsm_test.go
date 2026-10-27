@@ -18,6 +18,7 @@ func fsmTestRegistry(t *testing.T, task map[string]any) *Registry {
 	t.Helper()
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	CloseFSMStores()
+	t.Cleanup(CloseFSMStores) // release SQLite handles before TempDir RemoveAll (Windows)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v2/tasks/") {

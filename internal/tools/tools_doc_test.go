@@ -32,7 +32,9 @@ func TestToolsDocTable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	doc := string(content)
+	// Normalize CRLF: a windows checkout (core.autocrlf=true) leaves
+	// \r\n on disk, which must not count as table drift.
+	doc := strings.ReplaceAll(string(content), "\r\n", "\n")
 	begin := "<!-- tools:begin -->"
 	end := "<!-- tools:end -->"
 	bi := strings.Index(doc, begin)

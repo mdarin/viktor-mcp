@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
@@ -92,7 +93,10 @@ func TestGoldenSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("missing snapshot, run: make surface-update: %v", err)
 	}
-	if string(want) != string(surface) {
+	// Normalize CRLF: a windows checkout (core.autocrlf=true) leaves
+	// \r\n on disk, which must not count as surface drift.
+	normalized := bytes.ReplaceAll(want, []byte("\r\n"), []byte("\n"))
+	if string(normalized) != string(surface) {
 		t.Errorf("tool surface drifted from snapshot; run: make surface-update (regenerates golden.json, README table and counters)")
 	}
 }

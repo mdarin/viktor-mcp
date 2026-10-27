@@ -1,7 +1,7 @@
 // Package platform centralizes per-user filesystem locations so every
 // subsystem (config, FSM, memory, shadow) resolves the same directories
-// on every OS (card #939): XDG dirs on unix, %AppData%/%LocalAppData%
-// on Windows.
+// on every OS (card #939): XDG dirs by default, %AppData%/%LocalAppData%
+// fallback on Windows.
 package platform
 
 import (
@@ -11,9 +11,13 @@ import (
 )
 
 // ConfigDir returns the per-user configuration directory for viktor:
-// ($XDG_CONFIG_HOME|$HOME/.config)/viktor on unix, %AppData%\viktor on
-// Windows.
+// $XDG_CONFIG_HOME/viktor when set (on every OS — this is how tests and
+// power users relocate state), otherwise $HOME/.config/viktor on unix
+// and %AppData%\viktor on Windows.
 func ConfigDir() (string, error) {
+	if base := os.Getenv("XDG_CONFIG_HOME"); base != "" {
+		return filepath.Join(base, "viktor"), nil
+	}
 	if runtime.GOOS == "windows" {
 		return configDirWindows()
 	}
@@ -21,10 +25,13 @@ func ConfigDir() (string, error) {
 }
 
 // StateDir returns the per-user mutable state directory for viktor
-// (FSM databases, sync cursors, shadow queue): ($XDG_STATE_HOME|
-// $HOME/.local/state)/viktor on unix, %LocalAppData%\viktor\state on
-// Windows.
+// (FSM databases, sync cursors, shadow queue): $XDG_STATE_HOME/viktor
+// when set (on every OS), otherwise $HOME/.local/state/viktor on unix
+// and %LocalAppData%\viktor\state on Windows.
 func StateDir() (string, error) {
+	if base := os.Getenv("XDG_STATE_HOME"); base != "" {
+		return filepath.Join(base, "viktor"), nil
+	}
 	if runtime.GOOS == "windows" {
 		return stateDirWindows()
 	}
@@ -32,15 +39,11 @@ func StateDir() (string, error) {
 }
 
 func configDirUnix() (string, error) {
-	base := os.Getenv("XDG_CONFIG_HOME")
-	if base == "" {
-		home, err := os.UserHomeDir()
-		if err != nil || home == "" {
-			return "", err
-		}
-		base = filepath.Join(home, ".config")
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return "", err
 	}
-	return filepath.Join(base, "viktor"), nil
+	return filepath.Join(home, ".config", "viktor"), nil
 }
 
 func configDirWindows() (string, error) {
@@ -52,15 +55,11 @@ func configDirWindows() (string, error) {
 }
 
 func stateDirUnix() (string, error) {
-	base := os.Getenv("XDG_STATE_HOME")
-	if base == "" {
-		home, err := os.UserHomeDir()
-		if err != nil || home == "" {
-			return "", err
-		}
-		base = filepath.Join(home, ".local", "state")
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return "", err
 	}
-	return filepath.Join(base, "viktor"), nil
+	return filepath.Join(home, ".local", "state", "viktor"), nil
 }
 
 func stateDirWindows() (string, error) {

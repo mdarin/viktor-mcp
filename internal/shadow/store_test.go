@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -152,6 +153,9 @@ func TestDeleteProjectRemovesMirror(t *testing.T) {
 }
 
 func TestUnreachableDirIsPrivate(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX permission bits are not enforced on NTFS; 0700 reads back as 0777")
+	}
 	s := newTestStore(t)
 	info, err := os.Stat(s.Root())
 	if err != nil {

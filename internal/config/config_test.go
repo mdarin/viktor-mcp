@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -90,6 +91,9 @@ func TestLoadFileBadJSON(t *testing.T) {
 }
 
 func TestLoadFilePermsWarning(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX permission bits are not enforced on NTFS; 0600 reads back as 0666")
+	}
 	path := filepath.Join(t.TempDir(), "config.json")
 	content := `{"instances": {"default": {"url": "http://x", "token": "tk"}}}`
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {

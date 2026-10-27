@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -463,6 +464,9 @@ func fakeRiskCLI(t *testing.T, script string) string {
 }
 
 func TestRepowiseRunnerParse(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fakeRiskCLI writes POSIX sh scripts; Windows cannot exec extension-less scripts")
+	}
 	okJSON := `{"risk_percentile": 85.5, "review_priority": "high", "classification": "Big", "score": 8.5,
 		"health_delta": {"findings": [{"id": "hd_1", "severity": "high", "summary": "bad"}, {"id": "hd_2", "severity": "low", "summary": "meh"}]}}`
 	cli := fakeRiskCLI(t, "echo '"+okJSON+"'")
@@ -491,17 +495,20 @@ func TestRepowiseRunnerParse(t *testing.T) {
 		t.Fatalf("revspec must be echoed: %+v", d)
 	}
 
-	// Missing binary → unavailable.
-	d = RepowiseRunner{CLI: "/nonexistent/repowise-binary", Timeout: 5 * time.Second}.Run(context.Background(), "", "")
-	if d.Status != "unavailable" || d.Note == "" {
-		t.Fatalf("missing binary must degrade: %+v", d)
-	}
-
 	// Revspec is forwarded; path is forwarded ($1 is the subcommand).
 	cli = fakeRiskCLI(t, `test "$1" = "risk" && test "$2" = "--format" && test "$3" = "json" && test "$4" = "--path" && test "$5" = "/repo" && test "$6" = "abc..def" && echo '{"review_priority":"low"}' || exit 9`)
 	d = RepowiseRunner{CLI: cli, Timeout: 10 * time.Second}.Run(context.Background(), "/repo", "abc..def")
 	if d.Status != "ok" || d.ReviewPriority != "low" {
 		t.Fatalf("args forwarding failed: %+v (%s)", d, d.Note)
+	}
+}
+
+// TestRepowiseRunnerMissingBinary runs everywhere (no fake CLI needed):
+// an unresolvable binary must degrade to unavailable with a note.
+func TestRepowiseRunnerMissingBinary(t *testing.T) {
+	d := RepowiseRunner{CLI: "/nonexistent/repowise-binary", Timeout: 5 * time.Second}.Run(context.Background(), "", "")
+	if d.Status != "unavailable" || d.Note == "" {
+		t.Fatalf("missing binary must degrade: %+v", d)
 	}
 }
 

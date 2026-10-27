@@ -7,6 +7,30 @@ import (
 	"testing"
 )
 
+// XDG overrides win on every OS — tests (t.Setenv) and power users
+// rely on this to relocate state (the card #939 CI lesson: without it
+// all tests on Windows shared one real %LocalAppData% database).
+func TestXDGOverridesCrossPlatform(t *testing.T) {
+	cfg := filepath.Join(t.TempDir(), "cfg")
+	t.Setenv("XDG_CONFIG_HOME", cfg)
+	dir, err := ConfigDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(cfg, "viktor"); dir != want {
+		t.Fatalf("ConfigDir = %q, want %q", dir, want)
+	}
+	st := filepath.Join(t.TempDir(), "state")
+	t.Setenv("XDG_STATE_HOME", st)
+	dir, err = StateDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(st, "viktor"); dir != want {
+		t.Fatalf("StateDir = %q, want %q", dir, want)
+	}
+}
+
 func TestConfigDirUnix(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("unix branch")

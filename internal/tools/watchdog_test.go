@@ -10,6 +10,8 @@ import (
 // verify the stall and the audit trail (card #58).
 func TestWatchdogScanStallsIdleClaims(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	CloseFSMStores()
+	t.Cleanup(CloseFSMStores) // release SQLite handles before TempDir RemoveAll (Windows)
 	f, session := newCRUDFixture(t)
 	if _, err := callCRUD(t, session, "claim_task", map[string]any{"task_id": 301, "request_id": "req-watch-1"}); err != nil {
 		t.Fatal(err)
@@ -38,6 +40,8 @@ func TestWatchdogScanStallsIdleClaims(t *testing.T) {
 // stalled task to in_progress and records who/when in the audit trail.
 func TestWatchdogResumeAuditsActor(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	CloseFSMStores()
+	t.Cleanup(CloseFSMStores) // release SQLite handles before TempDir RemoveAll (Windows)
 	f, session := newCRUDFixture(t)
 	if _, err := callCRUD(t, session, "claim_task", map[string]any{"task_id": 301, "request_id": "req-watch-1"}); err != nil {
 		t.Fatal(err)
